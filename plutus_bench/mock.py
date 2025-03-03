@@ -68,7 +68,7 @@ class ExecutionException(Exception):
         self.logs = logs
 
     def __str__(self):
-        return f"{super().__str__()}\n{''.join(self.logs)}"
+        return f"{super().__str__()}. Logs:\n{''.join(self.logs)}"
 
 
 class InvalidTransactionError(Exception):
