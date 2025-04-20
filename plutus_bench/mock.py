@@ -5,6 +5,7 @@ import warnings
 from collections import defaultdict
 from dataclasses import asdict
 from typing import Any, Callable, Dict, List, Optional, Union
+import functools
 
 import cbor2
 import pycardano
@@ -41,7 +42,7 @@ from pycardano import (
     default_encoder,
     StakeKeyPair,
     StakeVerificationKey,
-    RedeemerKey
+    RedeemerKey,
 )
 
 from .protocol_params import (
@@ -54,6 +55,7 @@ from .tx_tools import (
     ScriptInvocation,
 )
 
+import pickle
 
 ValidatorType = Callable[[Any, Any, Any], Any]
 MintingPolicyType = Callable[[Any, Any], Any]
@@ -70,6 +72,7 @@ class ExecutionException(Exception):
 
 
 def request_wrapper(func):
+    @functools.wraps(func)
     def error_wrapper(*args, **kwargs):
         request_response = func(*args, **kwargs)
         if "return_type" in kwargs:
@@ -226,8 +229,13 @@ class MockFrostApi:
                 raise ValueError("Negative ExUnits not allowed")
             requested_mem += redeemer.ex_units.mem
             requested_cpu += redeemer.ex_units.steps
-        if requested_mem > self.protocol_param.max_tx_ex_mem or requested_cpu > self.protocol_param.max_tx_ex_steps:
-            raise ValueError(f"Invalid ExUnits: a total of {requested_mem} bytes and {requested_cpu} steps requested across all redeemers. Protocol requires less than {self.protocol_param.max_tx_ex_mem} bytes and {self.protocol_param.max_tx_ex_steps} steps per transaction.")
+        if (
+            requested_mem > self.protocol_param.max_tx_ex_mem
+            or requested_cpu > self.protocol_param.max_tx_ex_steps
+        ):
+            raise ValueError(
+                f"Invalid ExUnits: a total of {requested_mem} bytes and {requested_cpu} steps requested across all redeemers. Protocol requires less than {self.protocol_param.max_tx_ex_mem} bytes and {self.protocol_param.max_tx_ex_steps} steps per transaction."
+            )
         self.evaluate_tx(tx)
         self.submit_tx_mock(tx)
 
@@ -396,6 +404,27 @@ class MockFrostApi:
             delegation = account["delegation"]
             if account["registered_stake"] and delegation["pool_id"]:
                 delegation["rewards"] += rewards
+
+    def __getstate__(self):
+        state = self.__dict__
+        _utxo_state = state["_utxo_state"]
+        for key, value in _utxo_state.items():
+            _utxo_state[key] = [x.to_cbor() for x in value]
+        _utxo_from_txid = state["_utxo_from_txid"]
+        for key, value in _utxo_from_txid.items():
+            _utxo_from_txid[key] = {i: utxo.to_cbor() for i, utxo in value.items()}
+        return state
+
+    def __setstate__(self, state):
+        _utxo_state = state["_utxo_state"]
+        for key, value in _utxo_state.items():
+            _utxo_state[key] = [UTxO.from_cbor(x) for x in value]
+        _utxo_from_txid = state["_utxo_from_txid"]
+        for key, value in _utxo_from_txid.items():
+            _utxo_from_txid[key] = {
+                i: UTxO.from_cbor(utxo) for i, utxo in value.items()
+            }
+        self.__dict__.update(state)
 
     # These functions are supposed to overwrite the BlockFrost API
 
@@ -566,9 +595,11 @@ class MockFrostApi:
 
     @request_wrapper
     def transaction_submit_raw(self, tx_cbor: bytes, **kwargs):
-        # Make sure transaction is appropriate size
-        if len(tx_cbor)>self.protocol_param.max_tx_size:
-            raise ValueError(f"Transaction size ({len(tx_cbor)} bytes) exceeds protocol limit ({self.protocol_param.max_tx_size})")
+        # Prevent oversized transactions being submitted, this also efectively caps plutus script size
+        if len(tx_cbor) > self.protocol_param.max_tx_size:
+            raise ValueError(
+                f"Transaction size ({len(tx_cbor)} bytes) exceeds protocol limit ({self.protocol_param.max_tx_size})"
+            )
         tx = Transaction.from_cbor(tx_cbor)
         self.submit_tx(tx)
         return tx.id.payload.hex()

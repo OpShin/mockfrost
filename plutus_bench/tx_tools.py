@@ -334,7 +334,7 @@ def generate_script_contexts_resolved(
     return script_contexts
 
 
-@lru_cache(maxsize = 1000)
+@lru_cache(maxsize=1000)
 def uplc_unflat(script: bytes):
     return uplc.unflatten(script)
 

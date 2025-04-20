@@ -5,7 +5,7 @@ import uuid
 
 import fastapi
 import frozendict
-from typing import Dict, Optional, Annotated
+from typing import Dict, Optional, Annotated, Union
 from multiprocessing import Manager
 
 import pycardano
@@ -17,6 +17,8 @@ from pycardano import (
     TransactionId,
 )
 from pydantic import BaseModel
+from redis import Redis
+import pickle
 
 from plutus_bench.mock import MockFrostApi
 from plutus_bench.protocol_params import (
@@ -25,14 +27,73 @@ from plutus_bench.protocol_params import (
 )
 
 
+class ModifiableChainstate:
+    def __init__(
+        self, session_id: uuid.UUID, session: "Session", chain_state: MockFrostApi
+    ):
+        self.session_id = session_id
+        self.session = session
+        assert not isinstance(chain_state, ModifiableChainstate)
+        self.chain_state = chain_state
+
+    def __getattr__(self, name):
+        attr = getattr(self.chain_state, name)
+        if callable(attr):
+
+            def wrapped(*args, **kwargs):
+                result = attr(*args, **kwargs)
+                SESSIONS[self.session_id] = self.session
+                return result
+
+            return wrapped
+        return attr
+
+
 @dataclasses.dataclass
 class Session:
-    chain_state: MockFrostApi
+    chain_state: Union[MockFrostApi, ModifiableChainstate]
     creation_time: datetime.datetime
     last_access_time: datetime.datetime
 
 
-SESSIONS: Dict[uuid.UUID, "Session"] = {}
+class SessionManager:
+    def __init__(self, prefix="Session:"):
+        self.redis = Redis()
+        self.prefix = prefix
+
+    def key(self, key: uuid.UUID) -> str:
+        return self.prefix + str(key)
+
+    def __setitem__(self, key: uuid.UUID, value: Session):
+        if isinstance(value.chain_state, ModifiableChainstate):
+            value.chain_state = value.chain_state.chain_state
+        assert not isinstance(value.chain_state, ModifiableChainstate)
+        self.redis.set(
+            self.key(key),
+            pickle.dumps(value if isinstance(value, Session) else value.session),
+        )
+
+    def __getitem__(self, key: uuid.UUID):
+        session = pickle.loads(self.redis.get(self.key(key)))
+        session.chain_state = ModifiableChainstate(key, session, session.chain_state)
+        return session
+
+    def __delitem__(self, key: uuid.UUID):
+        assert self.redis.delete(self.key(key))
+
+    def __iter__(self):
+        for key in self.redis.scan_iter(match=f"{self.prefix}*"):
+            yield key
+
+    def __len__(self):
+        return len([i for i in self])
+
+    def __contains__(self, key: uuid.UUID) -> bool:
+        return self.redis.exists(self.key(key)) > 0
+
+
+# SESSIONS: Dict[uuid.UUID, "Session"] = {}
+SESSIONS = SessionManager()
 
 
 class SessionModel(BaseModel):
