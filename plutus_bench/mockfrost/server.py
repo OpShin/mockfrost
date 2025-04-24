@@ -17,7 +17,7 @@ from pycardano import (
     TransactionId,
 )
 from pydantic import BaseModel
-from redis import Redis
+import sqlite3
 import pickle
 
 from plutus_bench.mock import MockFrostApi
@@ -29,8 +29,15 @@ from plutus_bench.protocol_params import (
 
 class ModifiableChainstate:
     def __init__(
-        self, session_id: uuid.UUID, session: "Session", chain_state: MockFrostApi
+        self,
+        session_id: uuid.UUID,
+        session: "Session",
+        chain_state: MockFrostApi,
+        session_manager=None,
     ):
+        self.session_manager = (
+            session_manager if session_manager is not None else SessionManager()
+        )
         self.session_id = session_id
         self.session = session
         assert not isinstance(chain_state, ModifiableChainstate)
@@ -42,7 +49,7 @@ class ModifiableChainstate:
 
             def wrapped(*args, **kwargs):
                 result = attr(*args, **kwargs)
-                SESSIONS[self.session_id] = self.session
+                self.session_manager[self.session_id] = self.session
                 return result
 
             return wrapped
@@ -54,46 +61,111 @@ class Session:
     chain_state: Union[MockFrostApi, ModifiableChainstate]
     creation_time: datetime.datetime
     last_access_time: datetime.datetime
+    last_modify_time: datetime.datetime
 
 
 class SessionManager:
-    def __init__(self, prefix="Session:"):
-        self.redis = Redis()
+    def __init__(self, prefix="Session:", database_name="SESSIONS.db"):
+        self.conn = sqlite3.connect(database_name)
+        self.conn.execute("PRAGMA journal_mode=WAL;")
+        self.cursor = self.conn.cursor()
+        self.cursor.execute(
+            """
+        CREATE TABLE IF NOT EXISTS sessions (
+            key TEXT PRIMARY KEY,
+            session BLOB NOT NULL,
+            creation_time TEXT NOT NULL,
+            last_access_time TEXT NOT NULL,
+            last_modify_time TEXT NOT NULL
+        )
+        """
+        )
+        self.conn.commit()
+
         self.prefix = prefix
 
     def key(self, key: uuid.UUID) -> str:
         return self.prefix + str(key)
 
+    def unkey(self, full_key: str) -> uuid.UUID:
+        return uuid.UUID(full_key.removeprefix(self.prefix))
+
     def __setitem__(self, key: uuid.UUID, value: Session):
         if isinstance(value.chain_state, ModifiableChainstate):
             value.chain_state = value.chain_state.chain_state
+        value.last_modify_time = datetime.datetime.utcnow()
         assert not isinstance(value.chain_state, ModifiableChainstate)
-        self.redis.set(
-            self.key(key),
-            pickle.dumps(value if isinstance(value, Session) else value.session),
+        self.cursor.execute("BEGIN IMMEDIATE")
+        self.cursor.execute(
+            "SELECT last_modify_time FROM sessions WHERE key = ?", (self.key(key),)
         )
+        row = self.cursor.fetchone()
+        timestamp = (
+            datetime.datetime.fromisoformat(row[0])
+            if row is not None
+            else datetime.datetime.min
+        )
+        if timestamp <= value.last_access_time:
+            self.cursor.execute(
+                """
+            REPLACE INTO sessions (
+                key,
+                session,
+                creation_time,
+                last_access_time,
+                last_modify_time
+            ) VALUES (?, ?, ?, ?, ?)
+            """,
+                (
+                    self.key(key),
+                    pickle.dumps(value),
+                    value.creation_time.isoformat(),
+                    value.last_access_time.isoformat(),
+                    value.last_modify_time.isoformat(),
+                ),
+            )
+            self.conn.commit()
+        else:
+            self.conn.rollback()
+            raise RuntimeError(
+                f"Session for key {self.key(key)} has been modified since last access and will not be overwritten"
+            )
 
     def __getitem__(self, key: uuid.UUID):
-        session = pickle.loads(self.redis.get(self.key(key)))
-        session.chain_state = ModifiableChainstate(key, session, session.chain_state)
-        return session
+        self.cursor.execute(
+            "SELECT session FROM sessions WHERE key = ?", (self.key(key),)
+        )
+        row = self.cursor.fetchone()
+        if row:
+            session = pickle.loads(row[0])
+            session.last_access_time = datetime.datetime.utcnow()
+            session.chain_state = ModifiableChainstate(
+                key, session, session.chain_state, self
+            )
+            return session
+        else:
+            raise KeyError(f"Could not find {self.key(key)} in Session Database")
 
     def __delitem__(self, key: uuid.UUID):
-        assert self.redis.delete(self.key(key))
+        self.cursor.execute("DELETE FROM sessions WHERE key = ?", (self.key(key),))
+        self.conn.commit()
 
     def __iter__(self):
-        for key in self.redis.scan_iter(match=f"{self.prefix}*"):
-            yield key
+        self.cursor.execute("SELECT key FROM sessions")
+        for row in self.cursor.fetchall():
+            yield self.unkey(row[0])
 
     def __len__(self):
         return len([i for i in self])
 
     def __contains__(self, key: uuid.UUID) -> bool:
-        return self.redis.exists(self.key(key)) > 0
+        self.cursor.execute(
+            "SELECT 1 FROM sessions WHERE key = ? LIMIT 1", (self.key(key),)
+        )
+        return self.cursor.fetchone() is not None
 
 
 # SESSIONS: Dict[uuid.UUID, "Session"] = {}
-SESSIONS = SessionManager()
 
 
 class SessionModel(BaseModel):
@@ -151,14 +223,17 @@ def create_session(
         DEFAULT_GENESIS_PARAMETERS
     )
     session_id = uuid.uuid4()
+    now = datetime.datetime.utcnow()
+    SESSIONS = SessionManager()
     SESSIONS[session_id] = Session(
         chain_state=MockFrostApi(
             protocol_param=ProtocolParameters(**protocol_parameters),
             genesis_param=GenesisParameters(**genesis_parameters),
             seed=seed,
         ),
-        creation_time=datetime.datetime.now(),
-        last_access_time=datetime.datetime.now(),
+        creation_time=now,
+        last_access_time=now,
+        last_modify_time=now,
     )
     return session_id
 
@@ -168,7 +243,7 @@ def get_session_info(session_id: uuid.UUID) -> Optional[SessionModel]:
     """
     Remove a session after usage.
     """
-    session = SESSIONS.get(session_id)
+    session = get_session(session_id)
     if not session:
         return None
     return SessionModel(
@@ -182,6 +257,7 @@ def delete_session(session_id: uuid.UUID) -> bool:
     """
     Remove a session after usage.
     """
+    SESSIONS = SessionManager()
     if session_id in SESSIONS:
         del SESSIONS[session_id]
         return True
@@ -195,6 +271,7 @@ def model_from_transaction_input(tx_in: TransactionInput):
 
 
 def get_session(session_id):
+    SESSIONS = SessionManager()
     if session_id not in SESSIONS:
         raise fastapi.HTTPException(status_code=404, detail="Session not found")
     return SESSIONS[session_id]
