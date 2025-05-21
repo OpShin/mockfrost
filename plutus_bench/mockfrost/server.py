@@ -1,9 +1,12 @@
+import os
 import dataclasses
 import datetime
 import tempfile
 import uuid
 
 import fastapi
+from contextlib import asynccontextmanager
+import asyncio
 import frozendict
 from typing import Dict, Optional, Annotated, Union
 from multiprocessing import Manager
@@ -64,6 +67,11 @@ class Session:
     last_modify_time: datetime.datetime
 
 
+SESSION_PARAMETERS = {
+    'max_session_lifespan': datetime.timedelta(hours = int(os.getenv("MOCKFROST_MAX_SESSION_PARAMETERS", 24))), 
+    'max_idle_time': datetime.timedelta(hours= int(os.getenv("MOCKFROST_MAX_IDLE_TIME", 1)))
+    }
+
 class SessionManager:
     def __init__(self, prefix="Session:", database_name="SESSIONS.db"):
         self.conn = sqlite3.connect(database_name)
@@ -89,6 +97,30 @@ class SessionManager:
 
     def unkey(self, full_key: str) -> uuid.UUID:
         return uuid.UUID(full_key.removeprefix(self.prefix))
+
+    def cleanup(self) -> datetime.datetime:
+        '''
+        Clean up timed out sessions
+        Return time of next expiring session
+        '''
+        now = datetime.datetime.utcnow()
+        next_session = now + datetime.timedelta(seconds=600)
+        for key in self:
+            self.cursor.execute(
+                "SELECT last_access_time, creation_time FROM sessions WHERE key = ?", (self.key(key),)
+            )
+            last_access_time, creation_time = self.cursor.fetchone()
+            last_access_expire = last_access_time + SESSION_PARAMETERS["max_idle_time"]
+            creation_expire = creation_time + SESSION_PARAMETERS["max_session_lifespan"]
+            if now >= last_access_expire or now >= creation_expire:
+                del self[key]
+            else:
+                next_session = min(next_session, last_access_expire, creation_expire)
+        return next_session
+            
+
+
+
 
     def __setitem__(self, key: uuid.UUID, value: Session):
         if isinstance(value.chain_state, ModifiableChainstate):
@@ -178,6 +210,21 @@ class TransactionInputModel(BaseModel):
     output_index: int
 
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # start up logic
+    async def cleanup():
+        while True:
+            sessions = SessionManager()
+            next_expiring_session = sessions.cleanup()
+            delay  = (next_expiring_session - datetime.datetime.utcnow()).total_seconds()
+            await asyncio.sleep(delay)
+    asyncio.create_task(cleanup())
+    
+    yield
+    # Shutdown logic
+
+
 app = FastAPI(
     title="MockFrost API",
     summary="A clone of the important parts of the BlockFrost API which are used to evaluate transactions. Create your own mocked environment and execute transactions in it.",
@@ -197,9 +244,9 @@ There are two variants of this documentation available:
 - [Swagger UI](/docs): A more interactive documentation with a UI.
 - [Redoc](/redoc): A more static documentation with a focus on readability.
 """,
+    lifespan = lifespan,
 )
 from fastapi.responses import RedirectResponse
-
 
 @app.get("/", response_class=RedirectResponse, include_in_schema=False)
 async def redirect_fastapi():
