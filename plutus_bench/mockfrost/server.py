@@ -34,6 +34,7 @@ from slowapi.util import get_remote_address
 from slowapi.middleware import SlowAPIMiddleware
 from slowapi.errors import RateLimitExceeded
 
+
 class ModifiableChainstate:
     def __init__(
         self,
@@ -72,9 +73,14 @@ class Session:
 
 
 SESSION_PARAMETERS = {
-    'max_session_lifespan': datetime.timedelta(hours = int(os.getenv("MOCKFROST_MAX_SESSION_PARAMETERS", 24))), 
-    'max_idle_time': datetime.timedelta(hours= int(os.getenv("MOCKFROST_MAX_IDLE_TIME", 1)))
-    }
+    "max_session_lifespan": datetime.timedelta(
+        hours=int(os.getenv("MOCKFROST_MAX_SESSION_PARAMETERS", 24))
+    ),
+    "max_idle_time": datetime.timedelta(
+        hours=int(os.getenv("MOCKFROST_MAX_IDLE_TIME", 1))
+    ),
+}
+
 
 class SessionManager:
     def __init__(self, prefix="Session:", database_name="SESSIONS.db"):
@@ -103,15 +109,16 @@ class SessionManager:
         return uuid.UUID(full_key.removeprefix(self.prefix))
 
     def cleanup(self) -> datetime.datetime:
-        '''
+        """
         Clean up timed out sessions
         Return time of next expiring session
-        '''
+        """
         now = datetime.datetime.utcnow()
         next_session = now + datetime.timedelta(seconds=600)
         for key in self:
             self.cursor.execute(
-                "SELECT last_access_time, creation_time FROM sessions WHERE key = ?", (self.key(key),)
+                "SELECT last_access_time, creation_time FROM sessions WHERE key = ?",
+                (self.key(key),),
             )
             last_access_time, creation_time = self.cursor.fetchone()
             last_access_expire = last_access_time + SESSION_PARAMETERS["max_idle_time"]
@@ -121,10 +128,6 @@ class SessionManager:
             else:
                 next_session = min(next_session, last_access_expire, creation_expire)
         return next_session
-            
-
-
-
 
     def __setitem__(self, key: uuid.UUID, value: Session):
         if isinstance(value.chain_state, ModifiableChainstate):
@@ -221,18 +224,20 @@ async def lifespan(app: FastAPI):
         while True:
             sessions = SessionManager()
             next_expiring_session = sessions.cleanup()
-            delay  = (next_expiring_session - datetime.datetime.utcnow()).total_seconds()
+            delay = (next_expiring_session - datetime.datetime.utcnow()).total_seconds()
             await asyncio.sleep(delay)
+
     asyncio.create_task(cleanup())
-    
+
     yield
     # Shutdown logic
+
 
 # User Rate Limiter
 limiter = Limiter(key_func=get_remote_address, default_limits=["60/minute"])
 
 # Shared Limiter
-shared_limiter = Limiter(key_func = lambda r: "shared", default_limits=["1000/day"])
+shared_limiter = Limiter(key_func=lambda r: "shared", default_limits=["1000/day"])
 
 app = FastAPI(
     title="MockFrost API",
@@ -253,7 +258,7 @@ There are two variants of this documentation available:
 - [Swagger UI](/docs): A more interactive documentation with a UI.
 - [Redoc](/redoc): A more static documentation with a focus on readability.
 """,
-    lifespan = lifespan,
+    lifespan=lifespan,
 )
 from fastapi.responses import RedirectResponse
 
@@ -262,6 +267,7 @@ app.state.shared_limiter = shared_limiter
 app.state.SESSION_PARAMETERS = SESSION_PARAMETERS
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(SlowAPIMiddleware)
+
 
 @app.get("/", response_class=RedirectResponse, include_in_schema=False)
 async def redirect_fastapi():
