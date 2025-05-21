@@ -12,7 +12,7 @@ from typing import Dict, Optional, Annotated, Union
 from multiprocessing import Manager
 
 import pycardano
-from fastapi import FastAPI, Body
+from fastapi import FastAPI, Body, Request
 from pycardano import (
     ProtocolParameters,
     GenesisParameters,
@@ -233,11 +233,14 @@ async def lifespan(app: FastAPI):
     # Shutdown logic
 
 
-# User Rate Limiter
-limiter = Limiter(key_func=get_remote_address, default_limits=["60/minute"])
+def hybrid_key_func(request: Request):
+    if request.url.path == "/session":
+        return "shared"  # shared limit for this endpoint
+    return get_remote_address(request)  # IP-based limit elsewhere
 
-# Shared Limiter
-shared_limiter = Limiter(key_func=lambda r: "shared", default_limits=["1000/day"])
+
+# User Rate Limiter
+limiter = Limiter(key_func=get_remote_address, default_limits=["3600/hour"])
 
 app = FastAPI(
     title="MockFrost API",
@@ -263,7 +266,6 @@ There are two variants of this documentation available:
 from fastapi.responses import RedirectResponse
 
 app.state.limiter = limiter
-app.state.shared_limiter = shared_limiter
 app.state.SESSION_PARAMETERS = SESSION_PARAMETERS
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(SlowAPIMiddleware)
@@ -275,8 +277,9 @@ async def redirect_fastapi():
 
 
 @app.post("/session")
-@shared_limiter.limit("1000/day")
+@limiter.limit("1000/day")
 def create_session(
+    request: Request,
     seed: int = 0,
     protocol_parameters: dict = dataclasses.asdict(DEFAULT_PROTOCOL_PARAMETERS),
     genesis_parameters: dict = dataclasses.asdict(DEFAULT_GENESIS_PARAMETERS),
@@ -308,7 +311,7 @@ def create_session(
 
 
 @app.get("/session/{session_id}")
-def get_session_info(session_id: uuid.UUID) -> Optional[SessionModel]:
+def get_session_info(request: Request, session_id: uuid.UUID) -> Optional[SessionModel]:
     """
     Remove a session after usage.
     """
@@ -322,7 +325,7 @@ def get_session_info(session_id: uuid.UUID) -> Optional[SessionModel]:
 
 
 @app.delete("/session/{session_id}")
-def delete_session(session_id: uuid.UUID) -> bool:
+def delete_session(request: Request, session_id: uuid.UUID) -> bool:
     """
     Remove a session after usage.
     """
@@ -348,7 +351,7 @@ def get_session(session_id):
 
 @app.post("/{session_id}/ledger/txo")
 def add_transaction_output(
-    session_id: uuid.UUID, tx_cbor: Annotated[str, Body(embed=True)]
+    request: Request, session_id: uuid.UUID, tx_cbor: Annotated[str, Body(embed=True)]
 ) -> TransactionInputModel:
     """
     Add a transaction output to the UTxO, without specifying the transaction hash and index (the "input").
@@ -361,7 +364,9 @@ def add_transaction_output(
 
 
 @app.put("/{session_id}/ledger/utxo")
-def add_utxo(session_id: uuid.UUID, tx_cbor: bytes) -> TransactionInputModel:
+def add_utxo(
+    request: Request, session_id: uuid.UUID, tx_cbor: bytes
+) -> TransactionInputModel:
     """
     Add a transaction output and input to the UTxO.
     Potentially overwrites existing inputs with the same transaction hash and index.
@@ -374,7 +379,7 @@ def add_utxo(session_id: uuid.UUID, tx_cbor: bytes) -> TransactionInputModel:
 
 @app.delete("/{session_id}/ledger/txo")
 def delete_transaction_output(
-    session_id: uuid.UUID, tx_input: TransactionInputModel
+    request: Request, session_id: uuid.UUID, tx_input: TransactionInputModel
 ) -> bool:
     """
     Delete a transaction output from the UTxO.
@@ -392,7 +397,7 @@ def delete_transaction_output(
 
 
 @app.put("/{session_id}/ledger/slot")
-def set_slot(session_id: uuid.UUID, slot: int) -> int:
+def set_slot(request: Request, session_id: uuid.UUID, slot: int) -> int:
     """
     Set the current slot of the ledger to a specified value.
     Essentially acts as a "time travel" tool.
@@ -402,7 +407,9 @@ def set_slot(session_id: uuid.UUID, slot: int) -> int:
 
 
 @app.put("/{session_id}/pools/pool")
-def add_pool(session_id: uuid.UUID, pool_id: Annotated[str, Body(embed=True)]) -> str:
+def add_pool(
+    request: Request, session_id: uuid.UUID, pool_id: Annotated[str, Body(embed=True)]
+) -> str:
     """
     Add a fake staking pool. This may be delegated to mimic rewards.
     """
@@ -411,7 +418,7 @@ def add_pool(session_id: uuid.UUID, pool_id: Annotated[str, Body(embed=True)]) -
 
 
 @app.put("/{session_id}/pools/distribute")
-def distribute_rewards(session_id: uuid.UUID, rewards: int) -> int:
+def distribute_rewards(request: Request, session_id: uuid.UUID, rewards: int) -> int:
     """
     Distributed rewards to staked accounts. Emulates the behaviour of reward distribution at epoch boundaries.
     """
@@ -420,7 +427,7 @@ def distribute_rewards(session_id: uuid.UUID, rewards: int) -> int:
 
 
 @app.get("/{session_id}/api/v0/epochs/latest")
-def latest_epoch(session_id: uuid.UUID) -> dict:
+def latest_epoch(request: Request, session_id: uuid.UUID) -> dict:
     """
     Return the information about the latest, therefore current, epoch.
 
@@ -431,7 +438,7 @@ def latest_epoch(session_id: uuid.UUID) -> dict:
 
 
 @app.get("/{session_id}/api/v0/blocks/latest")
-def latest_block(session_id: uuid.UUID) -> dict:
+def latest_block(request: Request, session_id: uuid.UUID) -> dict:
     """
     Return the latest block available to the backends, also known as the tip of the blockchain.
 
@@ -441,7 +448,7 @@ def latest_block(session_id: uuid.UUID) -> dict:
 
 
 @app.get("/{session_id}/api/v0/genesis")
-def genesis(session_id: uuid.UUID) -> dict:
+def genesis(request: Request, session_id: uuid.UUID) -> dict:
     """
     Return the information about blockchain genesis.
 
@@ -451,7 +458,7 @@ def genesis(session_id: uuid.UUID) -> dict:
 
 
 @app.get("/{session_id}/api/v0/epochs/latest/parameters")
-def latest_epoch_protocol_parameters(session_id: uuid.UUID) -> dict:
+def latest_epoch_protocol_parameters(request: Request, session_id: uuid.UUID) -> dict:
     """
     Return the protocol parameters for the latest epoch.
 
@@ -463,7 +470,7 @@ def latest_epoch_protocol_parameters(session_id: uuid.UUID) -> dict:
 
 
 @app.get("/{session_id}/api/v0/scripts/{script_hash}")
-def specific_script(session_id: uuid.UUID, script_hash: str) -> dict:
+def specific_script(request: Request, session_id: uuid.UUID, script_hash: str) -> dict:
     """
     Information about a specific script
 
@@ -475,7 +482,7 @@ def specific_script(session_id: uuid.UUID, script_hash: str) -> dict:
 
 
 @app.get("/{session_id}/api/v0/scripts/{script_hash}/cbor")
-def script_cbor(session_id: uuid.UUID, script_hash: str) -> dict:
+def script_cbor(request: Request, session_id: uuid.UUID, script_hash: str) -> dict:
     """
     CBOR representation of a `plutus` script
 
@@ -487,7 +494,7 @@ def script_cbor(session_id: uuid.UUID, script_hash: str) -> dict:
 
 
 @app.get("/{session_id}/api/v0/scripts/{script_hash}/json")
-def script_json(session_id: uuid.UUID, script_hash: str) -> dict:
+def script_json(request: Request, session_id: uuid.UUID, script_hash: str) -> dict:
     """
     JSON representation of a `timelock` script
 
@@ -499,7 +506,7 @@ def script_json(session_id: uuid.UUID, script_hash: str) -> dict:
 
 
 @app.get("/{session_id}/api/v0/addresses/{address}/utxos")
-def address_utxos(session_id: uuid.UUID, address: str) -> list:
+def address_utxos(request: Request, session_id: uuid.UUID, address: str) -> list:
     """
     UTXOs of the address.
 
@@ -512,6 +519,7 @@ def address_utxos(session_id: uuid.UUID, address: str) -> list:
 
 @app.post("/{session_id}/api/v0/tx/submit")
 def submit_a_transaction(
+    request: Request,
     session_id: uuid.UUID,
     transaction: Annotated[bytes, Body(media_type="application/cbor")],
 ) -> str:
@@ -527,6 +535,7 @@ def submit_a_transaction(
 
 @app.post("/{session_id}/api/v0/utils/txs/evaluate")
 def submit_a_transaction_for_execution_units_evaluation(
+    request: Request,
     session_id: uuid.UUID,
     transaction: Annotated[str, Body(media_type="application/cbor")],
 ) -> dict:
@@ -541,7 +550,9 @@ def submit_a_transaction_for_execution_units_evaluation(
 
 
 @app.get("/{session_id}/api/v0/accounts/{stake_address}")
-def specific_account_address(session_id: uuid.UUID, stake_address: str) -> dict:
+def specific_account_address(
+    request: Request, session_id: uuid.UUID, stake_address: str
+) -> dict:
     """
     Obtain information about a specific stake account
 
