@@ -29,6 +29,10 @@ from plutus_bench.protocol_params import (
     DEFAULT_GENESIS_PARAMETERS,
 )
 
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.middleware import SlowAPIMiddleware
+from slowapi.errors import RateLimitExceeded
 
 class ModifiableChainstate:
     def __init__(
@@ -224,6 +228,11 @@ async def lifespan(app: FastAPI):
     yield
     # Shutdown logic
 
+# User Rate Limiter
+limiter = Limiter(key_func=get_remote_address, default_limits=["60/minute"])
+
+# Shared Limiter
+shared_limiter = Limiter(key_func = lambda r: "shared", default_limits=["1000/day"])
 
 app = FastAPI(
     title="MockFrost API",
@@ -248,12 +257,19 @@ There are two variants of this documentation available:
 )
 from fastapi.responses import RedirectResponse
 
+app.state.limiter = limiter
+app.state.shared_limiter = shared_limiter
+app.state.SESSION_PARAMETERS = SESSION_PARAMETERS
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_middleware(SlowAPIMiddleware)
+
 @app.get("/", response_class=RedirectResponse, include_in_schema=False)
 async def redirect_fastapi():
     return "/docs"
 
 
 @app.post("/session")
+@shared_limiter.limit("1000/day")
 def create_session(
     seed: int = 0,
     protocol_parameters: dict = dataclasses.asdict(DEFAULT_PROTOCOL_PARAMETERS),
