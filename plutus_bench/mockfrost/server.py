@@ -12,7 +12,8 @@ from typing import Dict, Optional, Annotated, Union
 from multiprocessing import Manager
 
 import pycardano
-from fastapi import FastAPI, Body, Request
+from fastapi import FastAPI, Body, Request, HTTPException
+from fastapi.responses import JSONResponse
 from pycardano import (
     ProtocolParameters,
     GenesisParameters,
@@ -23,7 +24,7 @@ from pydantic import BaseModel
 import sqlite3
 import pickle
 
-from plutus_bench.mock import MockFrostApi
+from plutus_bench.mock import MockFrostApi, InvalidTransactionError
 from plutus_bench.protocol_params import (
     DEFAULT_PROTOCOL_PARAMETERS,
     DEFAULT_GENESIS_PARAMETERS,
@@ -120,10 +121,15 @@ class SessionManager:
                 "SELECT last_access_time, creation_time FROM sessions WHERE key = ?",
                 (self.key(key),),
             )
-            last_access_time, creation_time = self.cursor.fetchone()
+            last_access_time, creation_time = (
+                datetime.datetime.fromisoformat(d) for d in self.cursor.fetchone()
+            )
             last_access_expire = last_access_time + SESSION_PARAMETERS["max_idle_time"]
             creation_expire = creation_time + SESSION_PARAMETERS["max_session_lifespan"]
             if now >= last_access_expire or now >= creation_expire:
+                print(
+                    f"Session {key} has expired (last accessed: {last_access_time}, created: {creation_time})"
+                )
                 del self[key]
             else:
                 next_session = min(next_session, last_access_expire, creation_expire)
@@ -528,9 +534,21 @@ def submit_a_transaction(
 
     https://docs.blockfrost.io/#tag/Cardano-Transactions/paths/~1tx~1submit/post
     """
-    return get_session(session_id).chain_state.transaction_submit_raw(
-        transaction, return_type="json"
-    )
+    try:
+        return get_session(session_id).chain_state.transaction_submit_raw(
+            transaction, return_type="json"
+        )
+    except InvalidTransactionError as e:
+        return JSONResponse(
+            status_code=422,
+            content={
+                "status_code": 422,
+                "message": str(e),
+                "error": "Invalid Transaction.",
+            },
+            media_type="application/json",
+        )
+        # raise HTTPException(status_code = 422, detail = {"message": str(e)})
 
 
 @app.post("/{session_id}/api/v0/utils/txs/evaluate")

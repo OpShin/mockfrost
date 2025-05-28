@@ -71,6 +71,12 @@ class ExecutionException(Exception):
         return f"{super().__str__()}\n{''.join(self.logs)}"
 
 
+class InvalidTransactionError(Exception):
+    def __init__(self, message: str):
+        super().__init__(message)
+        self.message = message
+
+
 def request_wrapper(func):
     @functools.wraps(func)
     def error_wrapper(*args, **kwargs):
@@ -226,14 +232,16 @@ class MockFrostApi:
             if isinstance(redeemer, RedeemerKey):
                 redeemer = tx.transaction_witness_set.redeemer[redeemer]
             if redeemer.ex_units.mem < 0 or redeemer.ex_units.steps < 0:
-                raise ValueError("Negative ExUnits not allowed")
+                raise InvalidTransactionError(
+                    f"Negative ExUnits not allowed: {str(redeemer.ex_units)}"
+                )
             requested_mem += redeemer.ex_units.mem
             requested_cpu += redeemer.ex_units.steps
         if (
             requested_mem > self.protocol_param.max_tx_ex_mem
             or requested_cpu > self.protocol_param.max_tx_ex_steps
         ):
-            raise ValueError(
+            raise InvalidTransactionError(
                 f"Invalid ExUnits: a total of {requested_mem} bytes and {requested_cpu} steps requested across all redeemers. Protocol requires less than {self.protocol_param.max_tx_ex_mem} bytes and {self.protocol_param.max_tx_ex_steps} steps per transaction."
             )
         self.evaluate_tx(tx)
@@ -597,7 +605,7 @@ class MockFrostApi:
     def transaction_submit_raw(self, tx_cbor: bytes, **kwargs):
         # Prevent oversized transactions being submitted, this also efectively caps plutus script size
         if len(tx_cbor) > self.protocol_param.max_tx_size:
-            raise ValueError(
+            raise InvalidTransactionError(
                 f"Transaction size ({len(tx_cbor)} bytes) exceeds protocol limit ({self.protocol_param.max_tx_size})"
             )
         tx = Transaction.from_cbor(tx_cbor)
@@ -612,6 +620,10 @@ class MockFrostApi:
     @request_wrapper
     def transaction_evaluate_raw(self, tx_cbor: bytes, **kwargs):
         try:
+            if len(tx_cbor) > self.protocol_param.max_tx_size:
+                raise InvalidTransactionError(
+                    f"Transaction size ({len(tx_cbor)} bytes) exceeds protocol limit ({self.protocol_param.max_tx_size})"
+                )
             res = self.evaluate_tx_cbor(tx_cbor)
         except Exception as e:
             return {

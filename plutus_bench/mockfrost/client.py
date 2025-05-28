@@ -87,17 +87,26 @@ class MockFrostClient:
     def __post_init__(self):
         self.base_url = self.base_url.rstrip("/")
 
+    def _handle_errors(self, response: requests.Response):
+        try:
+            response.raise_for_status()
+            return response.json()
+        except requests.exceptions.HTTPError as e:
+            raise RuntimeError(f"HTTP error: {e}, response: {response.text}")
+        except requests.exceptions.JSONDecodeError:
+            raise RuntimeError(f"Non-JSON response: {response.text}")
+
     def _get(self, path: str, **kwargs):
-        return self.session.get(self.base_url + path, **kwargs).json()
+        return self._handle_errors(self.session.get(self.base_url + path, **kwargs))
 
     def _post(self, path: str, **kwargs):
-        return self.session.post(self.base_url + path, **kwargs).json()
+        return self._handle_errors(self.session.post(self.base_url + path, **kwargs))
 
     def _put(self, path: str, **kwargs):
-        return self.session.put(self.base_url + path, **kwargs).json()
+        return self._handle_errors(self.session.put(self.base_url + path, **kwargs))
 
     def _del(self, path: str, **kwargs):
-        return self.session.delete(self.base_url + path, **kwargs).json()
+        return self._handle_errors(self.session.delete(self.base_url + path, **kwargs))
 
     def create_session(
         self, protocol_parameters=None, genesis_parameters=None
