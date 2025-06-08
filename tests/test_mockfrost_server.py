@@ -14,9 +14,14 @@ from plutus_bench.mock import MockFrostApi
 
 from tests.gift import spend_from_gift_contract
 from plutus_bench.tool import address_from_script, load_contract, ScriptType
-from plutus_bench.mockfrost.client import MockFrostClient, MockFrostUser, MockfrostApiError
+from plutus_bench.mockfrost.client import (
+    MockFrostClient,
+    MockFrostUser,
+    MockfrostApiError,
+)
 from plutus_bench.mockfrost.server import app
 from blockfrost.utils import ApiError
+
 own_path = pathlib.Path(__file__)
 
 
@@ -141,7 +146,6 @@ def test_max_resource_limits(server):
     ):
         context.submit_tx(tx)
 
-
     redeemer_value.ex_units.steps = old_steps
     redeemer_value.ex_units.mem = context.protocol_param.max_tx_ex_mem + 1
     with pytest.raises(
@@ -154,6 +158,6 @@ if __name__ == "__main__":
     # proc = Process(target = run_server, args=(), daemon=True)
     # proc.start()
     # test_max_transaction_size_
-    #test_rate_limiting_requests(False)
+    # test_rate_limiting_requests(False)
     test_max_resource_limits(False)
     # proc.kill()
