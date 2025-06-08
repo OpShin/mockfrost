@@ -92,5 +92,9 @@ def test_other_user_spend_from_gift_contract(server):
 
 
 if __name__ == "__main__":
-    test_spend_from_gift_contract()
-    test_other_user_spend_from_gift_contract()
+    # proc = Process(target = run_server, args=(), daemon=True)
+    # proc.start()
+    test_spend_from_gift_contract(False)
+    test_other_user_spend_from_gift_contract(False)
+
+    # proc.kill()

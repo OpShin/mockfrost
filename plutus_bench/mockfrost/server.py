@@ -3,6 +3,7 @@ import dataclasses
 import datetime
 import tempfile
 import uuid
+from types import MappingProxyType
 
 import fastapi
 from contextlib import asynccontextmanager
@@ -10,6 +11,8 @@ import asyncio
 import frozendict
 from typing import Dict, Optional, Annotated, Union
 from multiprocessing import Manager
+from collections import OrderedDict
+import functools
 
 import pycardano
 from fastapi import FastAPI, Body, Request, HTTPException
@@ -36,6 +39,16 @@ from slowapi.middleware import SlowAPIMiddleware
 from slowapi.errors import RateLimitExceeded
 
 
+def deep_freeze(obj):
+    if isinstance(obj, dict):
+        return MappingProxyType({k: deep_freeze(v) for k, v in obj.items()})
+    elif isinstance(obj, list):
+        return tuple(deep_freeze(i) for i in obj)
+    elif isinstance(obj, set):
+        return frozenset(deep_freeze(i) for i in obj)
+    return obj
+
+
 class ModifiableChainstate:
     def __init__(
         self,
@@ -54,15 +67,39 @@ class ModifiableChainstate:
 
     def __getattr__(self, name):
         attr = getattr(self.chain_state, name)
-        if callable(attr):
+        modifying_func = {
+            "set_block_slot",
+            "add_utxo",
+            "add_txout",
+            "remove_txi",
+            "remove_utxo",
+            "submit_tx",
+            "submit_tx_mock",
+            "submit_tx_cbor",
+            "wait",
+            "add_mock_pool",
+            "distribute_rewards",
+            "transaction_submit_raw",
+            "transaction_submit",
+        }
+        if callable(attr) and name in modifying_func:
 
+            @functools.wraps(attr)
             def wrapped(*args, **kwargs):
                 result = attr(*args, **kwargs)
                 self.session_manager[self.session_id] = self.session
                 return result
 
             return wrapped
-        return attr
+        else:
+            return deep_freeze(attr)
+
+    def __setattr__(self, name, value):
+        if name not in {"session_manager", "session_id", "session", "chain_state"}:
+            self.chain_state.__setattr__(name, value)
+            self.session_manager[self.session_id] = self.session
+        else:
+            super().__setattr__(name, value)
 
 
 @dataclasses.dataclass
@@ -84,6 +121,8 @@ SESSION_PARAMETERS = {
 
 
 class SessionManager:
+    SESSIONS_CACHE = OrderedDict()
+
     def __init__(self, prefix="Session:", database_name="SESSIONS.db"):
         self.conn = sqlite3.connect(database_name)
         self.conn.execute("PRAGMA journal_mode=WAL;")
@@ -131,6 +170,7 @@ class SessionManager:
                     f"Session {key} has expired (last accessed: {last_access_time}, created: {creation_time})"
                 )
                 del self[key]
+                self.SESSIONS_CACHE.pop(key, None)
             else:
                 next_session = min(next_session, last_access_expire, creation_expire)
         return next_session
@@ -150,7 +190,7 @@ class SessionManager:
             if row is not None
             else datetime.datetime.min
         )
-        if timestamp <= value.last_access_time:
+        if timestamp <= value.last_modify_time:
             self.cursor.execute(
                 """
             REPLACE INTO sessions (
@@ -175,25 +215,57 @@ class SessionManager:
             raise RuntimeError(
                 f"Session for key {self.key(key)} has been modified since last access and will not be overwritten"
             )
+        self.SESSIONS_CACHE[key] = (value, value.last_modify_time)
+        self.SESSIONS_CACHE.move_to_end(key)
+        while len(self.SESSIONS_CACHE) > 128:
+            self.SESSIONS_CACHE.popitem(last=False)
 
     def __getitem__(self, key: uuid.UUID):
         self.cursor.execute(
-            "SELECT session FROM sessions WHERE key = ?", (self.key(key),)
+            "SELECT last_modify_time FROM sessions WHERE key = ?", (self.key(key),)
         )
         row = self.cursor.fetchone()
-        if row:
+        if not row:
+            raise KeyError(f"Could not find {self.key(key)} in Session Database")
+        timestamp = (
+            datetime.datetime.fromisoformat(row[0])
+            if row is not None
+            else datetime.datetime.min
+        )
+        if key in self.SESSIONS_CACHE and self.SESSIONS_CACHE[key][0] == timestamp:
+            session = self.SESSIONS_CACHE[key][1]
+            self.SESSIONS_CACHE.move_to_end(key)
+        else:
+
+            self.cursor.execute(
+                "SELECT session FROM sessions WHERE key = ?", (self.key(key),)
+            )
+            row = self.cursor.fetchone()
             session = pickle.loads(row[0])
-            session.last_access_time = datetime.datetime.utcnow()
+        session.last_access_time = datetime.datetime.utcnow()
+        if not isinstance(session.chain_state, ModifiableChainstate):
             session.chain_state = ModifiableChainstate(
                 key, session, session.chain_state, self
             )
-            return session
-        else:
-            raise KeyError(f"Could not find {self.key(key)} in Session Database")
+        self.SESSIONS_CACHE[key] = (session.last_modify_time, session)
+        while len(self.SESSIONS_CACHE) > 128:
+            self.SESSIONS_CACHE.popitem(last=False)
+        self.cursor.execute("BEGIN IMMEDIATE")
+        self.cursor.execute(
+            """
+            UPDATE sessions
+            SET last_access_time = ?
+            WHERE key = ?
+            """,
+            (session.last_access_time.isoformat(), self.key(key)),
+        )
+        self.conn.commit()
+        return session
 
     def __delitem__(self, key: uuid.UUID):
         self.cursor.execute("DELETE FROM sessions WHERE key = ?", (self.key(key),))
         self.conn.commit()
+        self.SESSIONS_CACHE.pop(key, None)
 
     def __iter__(self):
         self.cursor.execute("SELECT key FROM sessions")
@@ -208,9 +280,6 @@ class SessionManager:
             "SELECT 1 FROM sessions WHERE key = ? LIMIT 1", (self.key(key),)
         )
         return self.cursor.fetchone() is not None
-
-
-# SESSIONS: Dict[uuid.UUID, "Session"] = {}
 
 
 class SessionModel(BaseModel):
@@ -271,9 +340,23 @@ There are two variants of this documentation available:
 )
 from fastapi.responses import RedirectResponse
 
+
+@app.exception_handler(RateLimitExceeded)
+async def custom_rate_limit_handler(request: Request, exc: RateLimitExceeded):
+    return JSONResponse(
+        status_code=429,
+        content={
+            "status_code": 422,
+            "error": "Too many requests",
+            "message": f"Please wait before making more requests. retry_after: {exc.detail}",  # or exc.headers.get("Retry-After")
+        },
+        headers=exc.headers,  # Important to keep headers for clients to back off
+    )
+
+
 app.state.limiter = limiter
 app.state.SESSION_PARAMETERS = SESSION_PARAMETERS
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_exception_handler(RateLimitExceeded, custom_rate_limit_handler)
 app.add_middleware(SlowAPIMiddleware)
 
 
@@ -546,7 +629,6 @@ def submit_a_transaction(
                 "message": str(e),
                 "error": "Invalid Transaction.",
             },
-            media_type="application/json",
         )
         # raise HTTPException(status_code = 422, detail = {"message": str(e)})
 

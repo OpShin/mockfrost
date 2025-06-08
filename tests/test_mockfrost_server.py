@@ -14,9 +14,9 @@ from plutus_bench.mock import MockFrostApi
 
 from tests.gift import spend_from_gift_contract
 from plutus_bench.tool import address_from_script, load_contract, ScriptType
-from plutus_bench.mockfrost.client import MockFrostClient, MockFrostUser
+from plutus_bench.mockfrost.client import MockFrostClient, MockFrostUser, MockfrostApiError
 from plutus_bench.mockfrost.server import app
-
+from blockfrost.utils import ApiError
 own_path = pathlib.Path(__file__)
 
 
@@ -36,17 +36,18 @@ def server():
 def test_rate_limiting_requests(server):
     client = MockFrostClient(base_url="http://127.0.0.1:8000")
     session = client.create_session()
+    context = session.chain_context()
     for i in range(3600):
-        session.info()
-    with pytest.raises(RuntimeError, match="Too Many Requests"):
-        print(session.info())
+        context.last_block_slot
+    with pytest.raises(ApiError, match="429"):
+        print(context.last_block_slot)
 
 
 def test_rate_limiting_sessions(server):
     client = MockFrostClient(base_url="http://127.0.0.1:8000")
     for i in range(1000):
         session = client.create_session()
-    with pytest.raises(RuntimeError, match="Too Many Requests"):
+    with pytest.raises(MockfrostApiError, match="Too many requests"):
         session = client.create_session()
 
 
@@ -140,6 +141,7 @@ def test_max_resource_limits(server):
     ):
         context.submit_tx(tx)
 
+
     redeemer_value.ex_units.steps = old_steps
     redeemer_value.ex_units.mem = context.protocol_param.max_tx_ex_mem + 1
     with pytest.raises(
@@ -152,6 +154,6 @@ if __name__ == "__main__":
     # proc = Process(target = run_server, args=(), daemon=True)
     # proc.start()
     # test_max_transaction_size_
-    test_rate_limiting_requests(False)
-    # test_max_resource_limits(False)
+    #test_rate_limiting_requests(False)
+    test_max_resource_limits(False)
     # proc.kill()
