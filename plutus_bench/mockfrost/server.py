@@ -38,6 +38,10 @@ from slowapi.util import get_remote_address
 from slowapi.middleware import SlowAPIMiddleware
 from slowapi.errors import RateLimitExceeded
 
+from dotenv import load_dotenv
+
+load_dotenv()
+
 
 def deep_freeze(obj):
     if isinstance(obj, dict):
@@ -110,20 +114,26 @@ class Session:
     last_modify_time: datetime.datetime
 
 
-SESSION_PARAMETERS = {
+SERVER_CONFIG = {
     "max_session_lifespan": datetime.timedelta(
-        hours=int(os.getenv("MOCKFROST_MAX_SESSION_PARAMETERS", 24))
+        hours=int(os.getenv("MOCKFROST_MAX_SESSION_LIFESPAN", 24))
     ),
     "max_idle_time": datetime.timedelta(
-        hours=int(os.getenv("MOCKFROST_MAX_IDLE_TIME", 1))
+        hours=int(os.getenv("MOCKFROST_MAX_SESSION_IDLE_TIME", 1))
     ),
+    "database_name": os.getenv("MOCKFROST_SESSION_DATABASE_NAME", "SESSIONS.db"),
+    "default_request_limit": os.getenv("MOCKFROST_IP_REQUEST_LIMIT", "3600/hour"),
+    "global_shared_session_limit": os.getenv(
+        "MOCKFROST_SHARED_SESSION_LIMIT", "24000/day"
+    ),
+    "ip_session_limit": os.getenv("MOCKFROST_IP_SESSION_LIMIT", "1000/day"),
 }
 
 
 class SessionManager:
     SESSIONS_CACHE = OrderedDict()
 
-    def __init__(self, prefix="Session:", database_name="SESSIONS.db"):
+    def __init__(self, prefix="Session:", database_name=SERVER_CONFIG["database_name"]):
         self.conn = sqlite3.connect(database_name)
         self.conn.execute("PRAGMA journal_mode=WAL;")
         self.cursor = self.conn.cursor()
@@ -163,8 +173,8 @@ class SessionManager:
             last_access_time, creation_time = (
                 datetime.datetime.fromisoformat(d) for d in self.cursor.fetchone()
             )
-            last_access_expire = last_access_time + SESSION_PARAMETERS["max_idle_time"]
-            creation_expire = creation_time + SESSION_PARAMETERS["max_session_lifespan"]
+            last_access_expire = last_access_time + SERVER_CONFIG["max_idle_time"]
+            creation_expire = creation_time + SERVER_CONFIG["max_session_lifespan"]
             if now >= last_access_expire or now >= creation_expire:
                 print(
                     f"Session {key} has expired (last accessed: {last_access_time}, created: {creation_time})"
@@ -308,14 +318,10 @@ async def lifespan(app: FastAPI):
     # Shutdown logic
 
 
-def hybrid_key_func(request: Request):
-    if request.url.path == "/session":
-        return "shared"  # shared limit for this endpoint
-    return get_remote_address(request)  # IP-based limit elsewhere
-
-
 # User Rate Limiter
-limiter = Limiter(key_func=get_remote_address, default_limits=["3600/hour"])
+limiter = Limiter(
+    key_func=get_remote_address, default_limits=[SERVER_CONFIG["default_request_limit"]]
+)
 
 app = FastAPI(
     title="MockFrost API",
@@ -355,7 +361,7 @@ async def custom_rate_limit_handler(request: Request, exc: RateLimitExceeded):
 
 
 app.state.limiter = limiter
-app.state.SESSION_PARAMETERS = SESSION_PARAMETERS
+app.state.SERVER_CONFIG = SERVER_CONFIG
 app.add_exception_handler(RateLimitExceeded, custom_rate_limit_handler)
 app.add_middleware(SlowAPIMiddleware)
 
@@ -366,7 +372,8 @@ async def redirect_fastapi():
 
 
 @app.post("/session")
-@limiter.limit("1000/day")
+@limiter.limit(SERVER_CONFIG["ip_session_limit"])
+@limiter.limit(SERVER_CONFIG["global_shared_session_limit"], key_func=lambda: "shared_key")
 def create_session(
     request: Request,
     seed: int = 0,
