@@ -373,7 +373,9 @@ async def redirect_fastapi():
 
 @app.post("/session")
 @limiter.limit(SERVER_CONFIG["ip_session_limit"])
-@limiter.limit(SERVER_CONFIG["global_shared_session_limit"], key_func=lambda: "shared_key")
+@limiter.limit(
+    SERVER_CONFIG["global_shared_session_limit"], key_func=lambda: "shared_key"
+)
 def create_session(
     request: Request,
     seed: int = 0,
