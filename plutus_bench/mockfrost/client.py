@@ -1,6 +1,7 @@
 import uuid
 from dataclasses import dataclass
 from typing import Union
+import functools
 
 import requests
 from pycardano.pool_params import PoolId
@@ -19,6 +20,22 @@ from pycardano import (
     PoolKeyHash,
 )
 from blockfrost import BlockFrostApi
+from blockfrost.utils import ApiError
+
+
+class MockfrostApiError(ApiError):
+    pass
+
+
+def client_request_wrapper(method):
+    @functools.wraps(method)
+    def wrapper(self, *args, **kwargs):
+        response = method(self, *args, **kwargs)
+        if response.status_code != 200:
+            raise MockfrostApiError(response)
+        return response.json()
+
+    return wrapper
 
 
 @dataclass
@@ -87,17 +104,21 @@ class MockFrostClient:
     def __post_init__(self):
         self.base_url = self.base_url.rstrip("/")
 
+    @client_request_wrapper
     def _get(self, path: str, **kwargs):
-        return self.session.get(self.base_url + path, **kwargs).json()
+        return self.session.get(self.base_url + path, **kwargs)
 
+    @client_request_wrapper
     def _post(self, path: str, **kwargs):
-        return self.session.post(self.base_url + path, **kwargs).json()
+        return self.session.post(self.base_url + path, **kwargs)
 
+    @client_request_wrapper
     def _put(self, path: str, **kwargs):
-        return self.session.put(self.base_url + path, **kwargs).json()
+        return self.session.put(self.base_url + path, **kwargs)
 
+    @client_request_wrapper
     def _del(self, path: str, **kwargs):
-        return self.session.delete(self.base_url + path, **kwargs).json()
+        return self.session.delete(self.base_url + path, **kwargs)
 
     def create_session(
         self, protocol_parameters=None, genesis_parameters=None

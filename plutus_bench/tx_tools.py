@@ -1,4 +1,4 @@
-from functools import cache
+from functools import lru_cache
 from typing import Optional, Union, List
 from dataclasses import dataclass
 
@@ -334,7 +334,7 @@ def generate_script_contexts_resolved(
     return script_contexts
 
 
-@cache
+@lru_cache(maxsize=1000)
 def uplc_unflat(script: bytes):
     return uplc.unflatten(script)
 

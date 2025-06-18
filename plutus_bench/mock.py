@@ -5,6 +5,7 @@ import warnings
 from collections import defaultdict
 from dataclasses import asdict
 from typing import Any, Callable, Dict, List, Optional, Union
+import functools
 
 import cbor2
 import pycardano
@@ -41,6 +42,7 @@ from pycardano import (
     default_encoder,
     StakeKeyPair,
     StakeVerificationKey,
+    RedeemerKey,
 )
 
 from .protocol_params import (
@@ -53,6 +55,7 @@ from .tx_tools import (
     ScriptInvocation,
 )
 
+import pickle
 
 ValidatorType = Callable[[Any, Any, Any], Any]
 MintingPolicyType = Callable[[Any, Any], Any]
@@ -68,7 +71,14 @@ class ExecutionException(Exception):
         return f"{super().__str__()}\n{''.join(self.logs)}"
 
 
+class InvalidTransactionError(Exception):
+    def __init__(self, message: str):
+        super().__init__(message)
+        self.message = message
+
+
 def request_wrapper(func):
+    @functools.wraps(func)
     def error_wrapper(*args, **kwargs):
         request_response = func(*args, **kwargs)
         if "return_type" in kwargs:
@@ -216,6 +226,24 @@ class MockFrostApi:
         self.remove_txi(utxo.input)
 
     def submit_tx(self, tx: Transaction):
+        # Check before evaluation that requested ExUnits are valid.
+        requested_mem, requested_cpu = 0, 0
+        for redeemer in tx.transaction_witness_set.redeemer or []:
+            if isinstance(redeemer, RedeemerKey):
+                redeemer = tx.transaction_witness_set.redeemer[redeemer]
+            if redeemer.ex_units.mem < 0 or redeemer.ex_units.steps < 0:
+                raise InvalidTransactionError(
+                    f"Negative ExUnits not allowed: {str(redeemer.ex_units)}"
+                )
+            requested_mem += redeemer.ex_units.mem
+            requested_cpu += redeemer.ex_units.steps
+        if (
+            requested_mem > self.protocol_param.max_tx_ex_mem
+            or requested_cpu > self.protocol_param.max_tx_ex_steps
+        ):
+            raise InvalidTransactionError(
+                f"Invalid ExUnits: a total of {requested_mem} bytes and {requested_cpu} steps requested across all redeemers. Protocol requires less than {self.protocol_param.max_tx_ex_mem} bytes and {self.protocol_param.max_tx_ex_steps} steps per transaction."
+            )
         self.evaluate_tx(tx)
         self.submit_tx_mock(tx)
 
@@ -316,6 +344,8 @@ class MockFrostApi:
             tx, input_utxos, ref_input_utxos, lambda s: self.posix_from_slot(s)
         )
         ret = {}
+        ex_units_steps_budget = self.protocol_param.max_tx_ex_steps
+        ex_units_mem_budget = self.protocol_param.max_tx_ex_mem
         for invocation in script_invocations:
             # run opshin script if available
             if self.opshin_scripts.get(invocation.script) is not None:
@@ -325,8 +355,8 @@ class MockFrostApi:
             redeemer = invocation.redeemer
             if redeemer.ex_units.steps <= 0 and redeemer.ex_units.mem <= 0:
                 redeemer.ex_units = ExecutionUnits(
-                    self.protocol_param.max_tx_ex_mem,
-                    self.protocol_param.max_tx_ex_steps,
+                    ex_units_mem_budget,
+                    ex_units_steps_budget,
                 )
 
             res, (cpu, mem), logs = evaluate_script(invocation)
@@ -334,6 +364,8 @@ class MockFrostApi:
                 raise ExecutionException(
                     f"Error while evaluating script: {res}", logs=logs
                 )
+            ex_units_mem_budget -= mem
+            ex_units_steps_budget -= cpu
             key = f"{redeemer.tag.name.lower()}:{redeemer.index}"
             ret[key] = ExecutionUnits(mem, cpu)
         return ret
@@ -380,6 +412,27 @@ class MockFrostApi:
             delegation = account["delegation"]
             if account["registered_stake"] and delegation["pool_id"]:
                 delegation["rewards"] += rewards
+
+    def __getstate__(self):
+        state = self.__dict__
+        _utxo_state = state["_utxo_state"]
+        for key, value in _utxo_state.items():
+            _utxo_state[key] = [x.to_cbor() for x in value]
+        _utxo_from_txid = state["_utxo_from_txid"]
+        for key, value in _utxo_from_txid.items():
+            _utxo_from_txid[key] = {i: utxo.to_cbor() for i, utxo in value.items()}
+        return state
+
+    def __setstate__(self, state):
+        _utxo_state = state["_utxo_state"]
+        for key, value in _utxo_state.items():
+            _utxo_state[key] = [UTxO.from_cbor(x) for x in value]
+        _utxo_from_txid = state["_utxo_from_txid"]
+        for key, value in _utxo_from_txid.items():
+            _utxo_from_txid[key] = {
+                i: UTxO.from_cbor(utxo) for i, utxo in value.items()
+            }
+        self.__dict__.update(state)
 
     # These functions are supposed to overwrite the BlockFrost API
 
@@ -550,6 +603,11 @@ class MockFrostApi:
 
     @request_wrapper
     def transaction_submit_raw(self, tx_cbor: bytes, **kwargs):
+        # Prevent oversized transactions being submitted, this also efectively caps plutus script size
+        if len(tx_cbor) > self.protocol_param.max_tx_size:
+            raise InvalidTransactionError(
+                f"Transaction size ({len(tx_cbor)} bytes) exceeds protocol limit ({self.protocol_param.max_tx_size})"
+            )
         tx = Transaction.from_cbor(tx_cbor)
         self.submit_tx(tx)
         return tx.id.payload.hex()
@@ -562,6 +620,10 @@ class MockFrostApi:
     @request_wrapper
     def transaction_evaluate_raw(self, tx_cbor: bytes, **kwargs):
         try:
+            if len(tx_cbor) > self.protocol_param.max_tx_size:
+                raise InvalidTransactionError(
+                    f"Transaction size ({len(tx_cbor)} bytes) exceeds protocol limit ({self.protocol_param.max_tx_size})"
+                )
             res = self.evaluate_tx_cbor(tx_cbor)
         except Exception as e:
             return {
