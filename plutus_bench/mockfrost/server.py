@@ -127,6 +127,7 @@ SERVER_CONFIG = {
         "MOCKFROST_SHARED_SESSION_LIMIT", "24000/day"
     ),
     "ip_session_limit": os.getenv("MOCKFROST_IP_SESSION_LIMIT", "1000/day"),
+    "ip_transaction_limit": os.getenv("MOCKFROST_IP_TRANSACTION_LIMIT", "1000/hour"),
 }
 
 
@@ -616,6 +617,7 @@ def address_utxos(request: Request, session_id: uuid.UUID, address: str) -> list
 
 
 @app.post("/{session_id}/api/v0/tx/submit")
+@limiter.limit(SERVER_CONFIG["ip_transaction_limit"])
 def submit_a_transaction(
     request: Request,
     session_id: uuid.UUID,
@@ -643,6 +645,7 @@ def submit_a_transaction(
 
 
 @app.post("/{session_id}/api/v0/utils/txs/evaluate")
+@limiter.limit(SERVER_CONFIG["ip_transaction_limit"])
 def submit_a_transaction_for_execution_units_evaluation(
     request: Request,
     session_id: uuid.UUID,
