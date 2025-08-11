@@ -117,6 +117,7 @@ The `plutus_bench.mockfrost.MockFrostUser` class can be used to create mock user
 
 ## Mock Pool
 For staking you need a mock pool with which to delegate to. This can be most easily achieved with the `plutus_bench.mockfrost.MockFrostPool`:
+
 ```python
     from plutus_bench.mockfrost import MockFrostPool
     # Create Pool
@@ -124,5 +125,4 @@ For staking you need a mock pool with which to delegate to. This can be most eas
 
     # distribute rewards to delegated accounts
     session.distribute_rewards(100_000_000)
-
-
+```
