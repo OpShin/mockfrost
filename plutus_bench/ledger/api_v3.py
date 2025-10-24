@@ -556,7 +556,7 @@ MaybeGovernanceActionId = Union[SomeGovernanceActionId, NoGovernanceActionId]
 
 
 @dataclass(unsafe_hash=True)
-class GAProtocolParameters(PlutusData):
+class GAParameterChange(PlutusData):
     CONSTR_ID = 0
     # The last governance action of type 'ProtocolParameters'. They must all form a chain.
     ancestor: MaybeGovernanceActionId
@@ -576,7 +576,7 @@ class ProtocolVersion(PlutusData):
 
 
 @dataclass(unsafe_hash=True)
-class GAHardFork(PlutusData):
+class GAHardForkInitiation(PlutusData):
     CONSTR_ID = 1
     # The last governance action of type 'HardFork'. They must all form a chain.
     ancestor: MaybeGovernanceActionId
@@ -590,11 +590,11 @@ class GAHardFork(PlutusData):
 
 
 @dataclass(unsafe_hash=True)
-class GATreasuryWithdrawal(PlutusData):
+class GATreasuryWithdrawals(PlutusData):
     CONSTR_ID = 2
     #  A collection of beneficiaries, which can be plain verification key
     #  hashes or script hashes (e.g. DAO).
-    beneficiaries: Dict[Credential, Lovelace]
+    treasury_withdrawals: Dict[Credential, Lovelace]
     # The optional guardrails script defined in the constitution. The script
     # is executed by the ledger in addition to the hard-coded ledger rules.
     #
@@ -611,7 +611,7 @@ class GANoConfidence(PlutusData):
 
 
 @dataclass(unsafe_hash=True)
-class GAConstitutionalCommittee(PlutusData):
+class GAUpdateCommittee(PlutusData):
     CONSTR_ID = 4
     # The last governance action of type `NoConfidence` or `ConstitutionalCommittee`.
     # They must all / form a chain.
@@ -650,14 +650,25 @@ class GAInfo(PlutusData):
 
 
 GovernanceAction = Union[
-    GAProtocolParameters,
-    GAHardFork,
-    GATreasuryWithdrawal,
+    GAParameterChange,
+    GAHardForkInitiation,
+    GATreasuryWithdrawals,
     GANoConfidence,
-    GAConstitutionalCommittee,
+    GAUpdateCommittee,
     GANewConstitution,
     GAInfo,
 ]
+
+AnchorDataHash = bytes
+
+@dataclass(unsafe_hash=True)
+class Anchor(PlutusData):
+    """
+    Represents a proposal procedure in governance.
+    """
+    CONSTR_ID = 0
+    url: str
+    data_hash: AnchorDataHash
 
 
 @dataclass(unsafe_hash=True)
@@ -665,10 +676,12 @@ class ProposalProcedure(PlutusData):
     """
     Represents a proposal procedure in governance.
     """
+    CONSTR_ID = 0
 
     deposit: Lovelace
     return_address: Credential
     governance_action: GovernanceAction
+    anchor: Anchor
 
 
 @dataclass(unsafe_hash=True)

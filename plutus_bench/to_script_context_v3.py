@@ -1,6 +1,10 @@
-from typing import Optional, Tuple
+from collections import defaultdict
+from typing import Optional, Tuple, cast
 
 import pycardano
+from pycardano import NonEmptyOrderedSet, ParameterChangeAction, HardForkInitiationAction, TreasuryWithdrawalsAction, \
+    NoConfidence
+
 from .ledger.api_v3 import *
 
 
@@ -12,10 +16,9 @@ def to_staking_credential(
         None,
     ],
 ):
-    try:
-        return SomeStakingCredential(to_staking_hash(sk))
-    except NotImplementedError:
+    if sk is None:
         return NoStakingCredential()
+    return SomeStakingCredential(to_staking_hash(sk))
 
 
 def to_staking_hash(
@@ -25,14 +28,12 @@ def to_staking_hash(
 ):
     if isinstance(sk, pycardano.PointerAddress):
         return StakingPtr(sk.slot, sk.tx_index, sk.cert_index)
-    if isinstance(sk, pycardano.VerificationKeyHash):
-        return StakingHash(PubKeyCredential(sk.payload))
-    if isinstance(sk, pycardano.ScriptHash):
-        return StakingHash(ScriptCredential(sk.payload))
+    if isinstance(sk, (pycardano.VerificationKeyHash, pycardano.ScriptHash)):
+        return StakingHash(to_credential(sk))
     raise NotImplementedError(f"Unknown stake key type {type(sk)}")
 
 
-def to_wdrl(wdrl: Optional[pycardano.Withdrawals]) -> Dict[StakingCredential, int]:
+def to_withdrawal(wdrl: Optional[pycardano.Withdrawals]) -> Dict[StakingCredential, int]:
     if wdrl is None:
         return {}
 
@@ -58,10 +59,12 @@ def to_valid_range(validity_start: Optional[int], ttl: Optional[int], posix_from
 
 
 def to_pubkeyhash(vkh: pycardano.VerificationKeyHash):
+    assert isinstance(vkh, pycardano.VerificationKeyHash)
     return PubKeyHash(vkh.payload)
 
 
 def to_tx_id(tx_id: pycardano.TransactionId):
+    assert isinstance(tx_id, pycardano.TransactionId)
     return TxId(tx_id.payload)
 
 
@@ -107,20 +110,14 @@ def value_to_value(v: pycardano.Value):
     ma[b""] = {b"": v.coin}
     return ma
 
-
-def to_payment_credential(
-    c: Union[pycardano.VerificationKeyHash, pycardano.ScriptHash],
-):
-    if isinstance(c, pycardano.VerificationKeyHash):
-        return PubKeyCredential(PubKeyHash(c.payload))
-    if isinstance(c, pycardano.ScriptHash):
-        return ScriptCredential(ValidatorHash(c.payload))
-    raise NotImplementedError(f"Unknown payment key type {type(c)}")
+def to_script_credential(credential: pycardano.ScriptHash) -> ScriptCredential:
+    assert isinstance(credential, pycardano.ScriptHash)
+    return ScriptCredential(credential.payload)
 
 
 def to_address(a: pycardano.Address):
     return Address(
-        to_payment_credential(a.payment_part),
+        to_credential(a.payment_part),
         to_staking_credential(a.staking_part),
     )
 
@@ -185,13 +182,105 @@ def to_redeemer_purpose(
     else:
         raise NotImplementedError()
 
-def to_votes():
-    # TODO
-    pass
+def to_credential(
+        credential: Union[pycardano.VerificationKeyHash, pycardano.ScriptHash],
+) -> Credential:
+    if isinstance(credential, pycardano.VerificationKeyHash):
+        return PubKeyCredential(credential.payload)
+    if isinstance(credential, pycardano.ScriptHash):
+        return ScriptCredential(credential.payload)
+    raise NotImplementedError(f"Unknown credential type {type(credential)}")
 
-def to_proposals():
-    #TODO
-    pass
+def to_voter(voter: pycardano.Voter) -> Voter:
+    if voter.voter_type == pycardano.VoterType.DREP:
+        return DelegateRepresentative(
+            to_credential(voter.credential),
+        )
+    elif voter.voter_type == pycardano.VoterType.COMMITTEE_HOT:
+        return ConstitutionalCommitteeMember(
+            to_credential(voter.credential),
+        )
+    elif voter.voter_type == pycardano.VoterType.STAKING_POOL:
+        return StakePool(
+            to_pubkeyhash(voter.credential),
+        )
+    else:
+        raise NotImplementedError(f"Unknown voter type {voter.voter_type}")
+
+
+def to_gov_action_id(gov_action_id: pycardano.GovActionId) -> GovernanceActionId:
+    return GovernanceActionId(
+        to_tx_id(gov_action_id.transaction_id),
+        gov_action_id.gov_action_index,
+    )
+
+
+def to_votes(voting_procedures: Optional[pycardano.VotingProcedures] = None) -> Dict[Voter, Dict[GovernanceActionId, Vote]]:
+    if voting_procedures is None:
+        return {}
+    res_dict = defaultdict(dict)
+    for voter, gov_actions in voting_procedures.to_shallow_primitive().items():
+        for gov_action_id, gov_action in cast(gov_actions, pycardano.GovActionIdToVotingProcedure()).items():
+            res_dict[to_voter(voter)][to_gov_action_id(gov_action_id)] = gov_action
+    return dict(res_dict)
+
+def to_gov_action(gov_action: pycardano.GovAction) -> GovernanceAction:
+    if isinstance(gov_action, pycardano.ParameterChangeAction):
+        return GAParameterChange(
+            ancestor = to_maybe_governance_action_id(gov_action.gov_action_id),
+            new_parameters=to_protocol_parameters_update(gov_action.protocol_param_update),
+            guardrails=to_maybe_script_credential(gov_action.policy_hash),
+        )
+    if isinstance(gov_action, pycardano.HardForkInitiationAction):
+        return GAHardForkInitiation(
+            ancestor = to_maybe_governance_action_id(gov_action.gov_action_id),
+            new_version=ProtocolVersion(gov_action.protocol_version.numerator, gov_action.protocol_version.denominator),
+        )
+    if isinstance(gov_action, pycardano.TreasuryWithdrawalsAction):
+        return GATreasuryWithdrawals(
+            treasury_withdrawals=to_treasury_withdrawals(gov_action.withdrawals),
+            guardrails=to_maybe_script_credential(gov_action.policy_hash),
+        )
+    if isinstance(gov_action, pycardano.NoConfidence):
+        return GANoConfidence(
+            ancestor = to_maybe_governance_action_id(gov_action.gov_action_id),
+        )
+    if isinstance(gov_action, pycardano.UpdateCommittee):
+        return GAUpdateCommittee(
+            ancestor = to_maybe_governance_action_id(gov_action.gov_action_id),
+            evicted_members=to_evicted_members(gov_action.committee_cold_credentials),
+            added_members=to_added_members(gov_action.committee_expiration),
+            quorum=to_fraction(gov_action.quorum),
+        )
+    if isinstance(gov_action, pycardano.NewConstitution):
+        return GANewConstitution(
+            ancestor = to_maybe_governance_action_id(gov_action.gov_action_id),
+            constitution=to_constitution(gov_action.constitution),
+        )
+    if isinstance(gov_action, pycardano.InfoAction):
+        return GAInfo()
+    raise NotImplementedError(f"Unknown gov_action type {type(gov_action)}")
+
+
+def to_proposal_procedure(
+        proposal_procedure: pycardano.ProposalProcedure,
+) -> ProposalProcedure:
+    return ProposalProcedure(
+        deposit=proposal_procedure.deposit,
+        reward_account=to_credential(proposal_procedure.reward_account),
+        governance_action=to_gov_action(proposal_procedure.gov_action),
+        anchor=to_anchor(proposal_procedure.anchor),
+    )
+
+def to_proposal_procedures(
+        proposal_procedures: Optional[pycardano.NonEmptyOrderedSet[pycardano.ProposalProcedure]]
+) -> List[ProposalProcedure]:
+    if proposal_procedures is None:
+        return []
+    res_list = []
+    for proposal_procedure in proposal_procedures:
+        res_list.append(to_proposal_procedure(proposal_procedure))
+    return res_list
 
 def to_treasury_value():
     #TODO
@@ -235,7 +324,7 @@ def to_tx_info(
         tx_body.fee,
         multiasset_to_value(tx_body.mint),
         [to_dcert(c) for c in tx_body.certificates] if tx_body.certificates else [],
-        to_wdrl(tx_body.withdraws),
+        to_withdrawal(tx_body.withdraws),
         to_valid_range(tx_body.validity_start, tx_body.ttl, posix_from_slot),
         (
             [to_pubkeyhash(s) for s in tx_body.required_signers]
