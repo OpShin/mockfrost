@@ -917,7 +917,9 @@ source = { editable = "." }
 dependencies = [
     { name = "fastapi" },
     { name = "httpx" },
+    { name = "opshin" },
     { name = "pycardano" },
+    { name = "pytest" },
     { name = "python-dotenv" },
     { name = "slowapi" },
     { name = "starlette" },
@@ -941,7 +943,9 @@ dev = [
 requires-dist = [
     { name = "fastapi", specifier = ">=0.110.1" },
     { name = "httpx", specifier = ">=0.27.0" },
+    { name = "opshin", specifier = ">=0.27.0" },
     { name = "pycardano", git = "https://github.com/Python-Cardano/pycardano?branch=main" },
+    { name = "pytest", specifier = ">=8.4.2" },
     { name = "python-dotenv", specifier = ">=1.1.0" },
     { name = "slowapi", specifier = ">=0.1.9" },
     { name = "starlette", specifier = ">=0.37.2" },

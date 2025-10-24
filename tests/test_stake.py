@@ -11,7 +11,7 @@ from plutus_bench.mock import MockFrostApi
 from tests.stake import register_and_delegate, withdraw
 from pycardano.crypto.bech32 import decode
 from opshin import build
-from opshin.ledger.api_v2 import (
+from opshin.ledger.api_v3 import (
     Address as Address,
     PubKeyCredential,
     PubKeyHash,
