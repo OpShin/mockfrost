@@ -14,7 +14,7 @@ from pycardano import (
     datum_hash,
     PlutusV1Script,
     PlutusV2Script,
-    UTxO,
+    UTxO, PlutusV3Script,
 )
 
 from pycardano import Datum as Anything, PlutusData
@@ -34,6 +34,7 @@ from .to_script_context_v1 import (
     to_certificate_script_context as to_certificate_script_context_v1,
     to_withdrawal_script_context as to_withdrawal_script_context_v1,
 )
+from .to_script_context_v3 import to_script_context as to_script_context_v3
 
 from .tool import ScriptType
 
@@ -120,25 +121,34 @@ def generate_script_contexts_resolved(
         try:
             spending_script = next(
                 s
-                for s in tx.transaction_witness_set.plutus_v2_script
-                if plutus_script_hash(PlutusV2Script(s))
+                for s in tx.transaction_witness_set.plutus_v3_script
+                if plutus_script_hash(PlutusV3Script(s))
                 == spending_input.output.address.payment_part
             )
-            script_type = ScriptType.PlutusV2
-
+            script_type = ScriptType.PlutusV3
         except (StopIteration, TypeError):
             try:
                 spending_script = next(
                     s
-                    for s in tx.transaction_witness_set.plutus_v1_script
-                    if plutus_script_hash(PlutusV1Script(s))
+                    for s in tx.transaction_witness_set.plutus_v2_script
+                    if plutus_script_hash(PlutusV2Script(s))
                     == spending_input.output.address.payment_part
                 )
-                script_type = ScriptType.PlutusV1
-            except Exception as e:
-                raise NotImplementedError(
-                    f"Can not validate spending of non plutus v1 or v2 script (or plutus v1 or v2 script is not in context)"
-                )
+                script_type = ScriptType.PlutusV2
+            except (StopIteration, TypeError):
+                try:
+                    spending_script = next(
+                        s
+                        for s in tx.transaction_witness_set.plutus_v1_script
+                        if plutus_script_hash(PlutusV1Script(s))
+                        == spending_input.output.address.payment_part
+                    )
+                    script_type = ScriptType.PlutusV1
+                except Exception as e:
+                    raise NotImplementedError(
+                        f"Can not validate spending of non plutus v1 or v2 script (or plutus v1 or v2 script is not in context)"
+                    )
+
         if spending_input.output.datum is not None:
             assert (
                 script_type != ScriptType.PlutusV1
@@ -168,6 +178,10 @@ def generate_script_contexts_resolved(
         elif script_type is ScriptType.PlutusV2:
             script_context = to_spending_script_context_v2(
                 tx_info_args, spending_input.input
+            )
+        elif script_type is ScriptType.PlutusV3:
+            script_context = to_script_context_v3(
+                tx_info_args, spending_redeemer
             )
         else:
             raise NotImplementedError()
@@ -199,7 +213,7 @@ def generate_script_contexts_resolved(
             (
                 (s, ScriptType.PlutusV1)
                 for s in tx.transaction_witness_set.plutus_v1_script or []
-                if plutus_script_hash(PlutusV2Script(s)) == minting_script_hash
+                if plutus_script_hash(PlutusV1Script(s)) == minting_script_hash
             ),
             (None, None),
         )
@@ -213,8 +227,17 @@ def generate_script_contexts_resolved(
                     ),
                     (minting_script, script_type),
                 )
-                if not minting_script
-                else minting_script
+            )
+        if not minting_script:
+            minting_script, script_type = (
+                next(
+                    (
+                        (s, ScriptType.PlutusV3)
+                        for s in tx.transaction_witness_set.plutus_v2_script or []
+                        if plutus_script_hash(PlutusV3Script(s)) == minting_script_hash
+                    ),
+                    (minting_script, script_type),
+                )
             )
 
         assert (
@@ -225,6 +248,8 @@ def generate_script_contexts_resolved(
             script_context = to_minting_script_context_v1(tx_info_args, minting_script)
         elif script_type == ScriptType.PlutusV2:
             script_context = to_minting_script_context_v2(tx_info_args, minting_script)
+        elif script_type == ScriptType.PlutusV3:
+            script_context = to_script_context_v3(tx_info_args, minting_redeemer)
         else:
             raise NotImplementedError()
 
@@ -267,6 +292,15 @@ def generate_script_contexts_resolved(
             ),
             (certificate_script, script_type),
         )
+        certificate_script, script_type = next(
+            (
+                (s, ScriptType.PlutusV3)
+                for s in tx.transaction_witness_set.plutus_v2_script or []
+                if plutus_script_hash(PlutusV3Script(s))
+                         == certificate.stake_credential.credential
+            ),
+            (certificate_script, script_type),
+        )
         assert (
             certificate_script and script_type
         ), "Can not validate spending of non plutus v1 or v2 scripts (or plutus v1 or v2 script is not in context)"
@@ -275,6 +309,8 @@ def generate_script_contexts_resolved(
             script_context = to_certificate_script_context_v1(tx_info_args, certificate)
         elif script_type == ScriptType.PlutusV2:
             script_context = to_certificate_script_context_v2(tx_info_args, certificate)
+        elif script_type == ScriptType.PlutusV3:
+            script_context = to_script_context_v3(tx_info_args, certificate_redeemer)
         else:
             raise NotImplementedError()
 
@@ -322,6 +358,8 @@ def generate_script_contexts_resolved(
             script_context = to_withdrawal_script_context_v1(tx_info_args, script_hash)
         elif script_type == ScriptType.PlutusV2:
             script_context = to_withdrawal_script_context_v2(tx_info_args, script_hash)
+        elif script_type == ScriptType.PlutusV3:
+            script_context = to_script_context_v3(tx_info_args, withdrawal_redeemer)
         else:
             raise NotImplementedError("Only Plutus V1 and V2 scripts are supported.")
 

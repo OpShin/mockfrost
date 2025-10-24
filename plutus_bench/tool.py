@@ -11,6 +11,7 @@ class ScriptType(Enum):
     NativeScript = "NativeScript"
     PlutusV1 = "PlutusV1"
     PlutusV2 = "PlutusV2"
+    PlutusV3 = "PlutusV3"
 
 
 def load_contract(
@@ -45,6 +46,8 @@ def load_contract(
         return pycardano.PlutusV1Script(script)
     elif plutus_version == ScriptType.PlutusV2:
         return pycardano.PlutusV2Script(script)
+    elif plutus_version == ScriptType.PlutusV3:
+        return pycardano.PlutusV3Script(script)
     else:
         raise ValueError(f"Unsupported script type {plutus_version}")
 

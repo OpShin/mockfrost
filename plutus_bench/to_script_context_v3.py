@@ -3,7 +3,7 @@ from collections import defaultdict
 from typing import Optional, Tuple, cast
 
 import pycardano
-from pycardano import CommitteeColdCredentialEpochMap
+from pycardano import CommitteeColdCredentialEpochMap, RedeemerTag
 
 from .ledger.api_v3 import *
 
@@ -158,7 +158,7 @@ def to_tx_in_info(i: pycardano.TransactionInput, o: pycardano.TransactionOutput)
 def to_redeemer_purpose(
     r: Union[pycardano.RedeemerKey, pycardano.Redeemer],
     tx_body: pycardano.TransactionBody,
-):
+) -> ScriptPurpose:
     v = r.tag
     if v == pycardano.RedeemerTag.SPEND:
         spent_input = tx_body.inputs[r.index]
@@ -174,11 +174,12 @@ def to_redeemer_purpose(
         script_hash = pycardano.Address.from_primitive(withdrawal).staking_part
         return Withdrawing(to_staking_hash(script_hash))
     elif v == pycardano.RedeemerTag.VOTING:
-        # TODO
-        return Voting()
+        return Voting(to_voter(sorted(tx_body.voting_procedures.keys())[r.index]))
     elif v == pycardano.RedeemerTag.PROPOSING:
-        # TODO
-        return Proposing()
+        return Proposing(
+            r.index,
+            to_proposal_procedure(sorted(tx_body.proposal_procedures)[r.index])
+        )
     else:
         raise NotImplementedError()
 
@@ -410,58 +411,17 @@ def to_tx_info(
     )
 
 
-def to_spending_script_context(
-    tx_info_args: Tuple, spending_input: pycardano.TransactionInput, redeemer: pycardano.Redeemer
+def to_script_context(
+    tx_info_args: Tuple[
+        pycardano.Transaction,
+        List[pycardano.TransactionOutput],
+        List[pycardano.TransactionOutput],
+        ...
+    ], redeemer: pycardano.Redeemer
 ):
     return ScriptContext(
         to_tx_info(*tx_info_args),
         redeemer.data,
-        Spending(to_tx_out_ref(spending_input)),
+        to_redeemer_purpose(redeemer, tx_info_args[0].transaction_body),
     )
 
-
-def to_minting_script_context(
-    tx_info_args: Tuple, minting_script: pycardano.PlutusV2Script, redeemer: pycardano.Redeemer
-):
-    return ScriptContext(
-        to_tx_info(*tx_info_args),
-        redeemer.data,
-        Minting(pycardano.script_hash(minting_script).payload),
-    )
-
-
-def to_publishing_script_context(tx_info_args, certificate, redeemer: pycardano.Redeemer):
-    return ScriptContext(
-        to_tx_info(*tx_info_args),
-        redeemer.data,
-        # TODO figure out index
-        Publishing(to_dcert(certificate))
-    )
-
-
-def to_withdrawal_script_context(tx_info_args, script_hash, redeemer: pycardano.Redeemer):
-    return ScriptContext(
-        to_tx_info(*tx_info_args),
-        redeemer.data,
-        Withdrawing(to_staking_hash(script_hash)),
-    )
-
-def to_voting_script_context(
-        tx_info_args, script_hash, redeemer: pycardano.Redeemer
-):
-    return ScriptContext(
-        to_tx_info(*tx_info_args),
-        redeemer.data,
-        # TODO figure out voter
-        Voting(to_staking_hash(script_hash)),
-    )
-
-def to_proposing_script_context(
-        tx_info_args, script_hash, redeemer: pycardano.Redeemer
-):
-    return ScriptContext(
-        to_tx_info(*tx_info_args),
-        redeemer.data,
-        # TODO figure out proposal procedure
-        Proposing(to_staking_hash(script_hash)),
-    )
