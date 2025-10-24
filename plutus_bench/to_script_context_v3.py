@@ -1,9 +1,9 @@
+import fractions
 from collections import defaultdict
 from typing import Optional, Tuple, cast
 
 import pycardano
-from pycardano import NonEmptyOrderedSet, ParameterChangeAction, HardForkInitiationAction, TreasuryWithdrawalsAction, \
-    NoConfidence
+from pycardano import CommitteeColdCredentialEpochMap
 
 from .ledger.api_v3 import *
 
@@ -224,6 +224,72 @@ def to_votes(voting_procedures: Optional[pycardano.VotingProcedures] = None) -> 
             res_dict[to_voter(voter)][to_gov_action_id(gov_action_id)] = gov_action
     return dict(res_dict)
 
+def to_maybe_governance_action_id(gov_action_id: Optional[pycardano.GovActionId]) -> MaybeGovernanceActionId:
+    if gov_action_id is None:
+        return NoGovernanceActionId()
+    return SomeGovernanceActionId(
+        to_gov_action_id(gov_action_id),
+    )
+
+def to_protocol_parameters_update(
+        protocol_parameters: pycardano.ProtocolParamUpdate,
+) -> Dict[int, Datum]:
+    # TODO
+    return {}
+
+def to_maybe_script_credential(
+        policy_hash: Optional[pycardano.PolicyHash] = None,
+) -> Union[SomeScriptHash, NoScriptHash]:
+    if policy_hash is None:
+        return NoScriptHash()
+    return SomeScriptHash(policy_hash.payload)
+
+def to_evicted_members(
+        committee_cold_credentials: pycardano.OrderedSet[pycardano.CommitteeColdCredential],
+) -> List[Credential]:
+    return [
+        to_credential(x.credential)
+        for x in committee_cold_credentials
+    ]
+
+def to_added_members(
+    commitee_cold_credential_epoch_map: pycardano.CommitteeColdCredentialEpochMap,
+) -> Dict[Credential, int]:
+    res = {}
+    for cold_credential, epoch in commitee_cold_credential_epoch_map.to_dict().items():
+        res[to_credential(cold_credential.credential)] = epoch
+    return res
+
+def to_treasury_withdrawals(
+        treasury_withdrawals: pycardano.TreasuryWithdrawal
+) -> Dict[Credential, Lovelace]:
+    res_dict = {}
+    for recipient, amount in treasury_withdrawals.to_shallow_primitive():
+        res_dict[to_credential(recipient.credential)] = amount
+    return res_dict
+
+def to_fraction(
+        fraction: fractions.Fraction,
+) -> Fraction:
+    return Fraction(
+        fraction.numerator,
+        fraction.denominator,
+    )
+
+def to_anchor(anchor: pycardano.Anchor) -> Anchor:
+    return Anchor(
+        url=anchor.url.encode("utf8"),
+        data_hash=anchor.data_hash.payload,
+    )
+
+def to_constitution(
+        constitution: Tuple[Anchor, Optional[ScriptHash]],
+) -> Constitution:
+    return Constitution(
+        anchor=to_anchor(constitution[0]),
+        guardrails=to_maybe_script_credential(constitution[1]),
+    )
+
 def to_gov_action(gov_action: pycardano.GovAction) -> GovernanceAction:
     if isinstance(gov_action, pycardano.ParameterChangeAction):
         return GAParameterChange(
@@ -282,13 +348,12 @@ def to_proposal_procedures(
         res_list.append(to_proposal_procedure(proposal_procedure))
     return res_list
 
-def to_treasury_value():
-    #TODO
-    pass
-
-def to_donation():
-    # TODO
-    pass
+def to_optional_lovelace(
+        amount: Optional[Lovelace],
+) -> OptionalLovelace:
+    if amount is None:
+        return NoValue()
+    return BoxedInt(amount)
 
 def to_tx_info(
     tx: pycardano.Transaction,
@@ -339,9 +404,9 @@ def to_tx_info(
         {pycardano.datum_hash(d).payload: d for d in datums},
         to_tx_id(tx_body.id),
         to_votes(tx_body.voting_procedures),
-        to_proposals(tx_body.proposal_procedures),
-        to_treasury_value(tx_body.current_treasury_value),
-        to_donation(tx_body.donation),
+        to_proposal_procedures(tx_body.proposal_procedures),
+        to_optional_lovelace(tx_body.current_treasury_value),
+        to_optional_lovelace(tx_body.donation),
     )
 
 

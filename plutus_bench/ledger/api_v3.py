@@ -220,6 +220,7 @@ class SomeDatumHash(PlutusData):
     CONSTR_ID = 1
     datum_hash: DatumHash
 
+ScriptHash = bytes
 
 @dataclass(unsafe_hash=True)
 class SomeScriptHash(PlutusData):
@@ -228,7 +229,7 @@ class SomeScriptHash(PlutusData):
     """
 
     CONSTR_ID = 0
-    script_hash: DatumHash
+    script_hash: ScriptHash
 
 
 MaybeScriptHash = Union[SomeScriptHash, NoScriptHash]
@@ -627,9 +628,22 @@ class GAUpdateCommittee(PlutusData):
     quorum: Fraction
 
 
+AnchorDataHash = bytes
+
+@dataclass(unsafe_hash=True)
+class Anchor(PlutusData):
+    """
+    Represents a proposal procedure in governance.
+    """
+    CONSTR_ID = 0
+    url: bytes
+    data_hash: AnchorDataHash
+
 @dataclass(unsafe_hash=True)
 class Constitution(PlutusData):
     CONSTR_ID = 0
+    # Anchor
+    anchor: Anchor
     # Guardrails for operations as a script
     guardrails: MaybeScriptHash
 
@@ -659,17 +673,6 @@ GovernanceAction = Union[
     GAInfo,
 ]
 
-AnchorDataHash = bytes
-
-@dataclass(unsafe_hash=True)
-class Anchor(PlutusData):
-    """
-    Represents a proposal procedure in governance.
-    """
-    CONSTR_ID = 0
-    url: str
-    data_hash: AnchorDataHash
-
 
 @dataclass(unsafe_hash=True)
 class ProposalProcedure(PlutusData):
@@ -679,7 +682,7 @@ class ProposalProcedure(PlutusData):
     CONSTR_ID = 0
 
     deposit: Lovelace
-    return_address: Credential
+    reward_account: Credential
     governance_action: GovernanceAction
     anchor: Anchor
 
