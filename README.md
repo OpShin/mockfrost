@@ -26,6 +26,7 @@ git clone https://github.com/OpShin/plutus-bench.git
 cd plutus-bench
 # install the package
 pip install .
+bash ensure_pure_cbor2.sh
 # run the mock server
 uvicorn plutus_bench.mockfrost.server:app 
 ```

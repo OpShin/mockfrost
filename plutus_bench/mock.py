@@ -348,10 +348,6 @@ class MockFrostApi:
         ex_units_mem_budget = self.protocol_param.max_tx_ex_mem
         for invocation in script_invocations:
             # run opshin script if available
-            if self.opshin_scripts.get(invocation.script) is not None:
-                raise NotImplementedError("This code never seems to be reached")
-                opshin_validator = self.opshin_scripts[invocation.script]
-                evaluate_opshin_validator(opshin_validator, invocation)
             redeemer = invocation.redeemer
             if redeemer.ex_units.steps <= 0 and redeemer.ex_units.mem <= 0:
                 redeemer.ex_units = ExecutionUnits(

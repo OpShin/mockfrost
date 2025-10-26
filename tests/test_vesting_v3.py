@@ -28,7 +28,7 @@ class VestingRedeemer(pycardano.PlutusData):
     CONSTR_ID = 0
 
 
-def test_vesting_v1_script():
+def test_vesting_v3_script():
     api = MockFrostApi()
     context = MockChainContext(api=api)
     giver = MockUser(api)
@@ -38,9 +38,8 @@ def test_vesting_v1_script():
     taker.fund(5_000_000)  # collateral
 
     vesting_script = load_contract(
-        own_path.parent / "assets/vesting_v1.plutus", ScriptType.PlutusV1
+        own_path.parent / "assets/vesting_v3.plutus", ScriptType.PlutusV3
     )
-
     current_time = int(datetime.datetime.now().timestamp()) # int(datetime.datetime(2020, 1, 1).timestamp())
 
     datum = VestingDatum(
@@ -76,4 +75,4 @@ def test_vesting_v1_script():
 
 
 if __name__ == "__main__":
-    test_vesting_v1_script()
+    test_vesting_v3_script()

@@ -14,7 +14,8 @@ from pycardano import (
     datum_hash,
     PlutusV1Script,
     PlutusV2Script,
-    UTxO, PlutusV3Script,
+    PlutusV3Script,
+    UTxO,
 )
 
 from pycardano import Datum as Anything, PlutusData
@@ -22,6 +23,7 @@ from pycardano import Datum as Anything, PlutusData
 # from .ledger.api_v2 import *
 from .ledger.api_v1 import ScriptContext as ScriptContextV1
 from .ledger.api_v2 import ScriptContext as ScriptContextV2
+from .ledger.api_v3 import ScriptContext as ScriptContextV3
 from .to_script_context_v2 import (
     to_spending_script_context as to_spending_script_context_v2,
     to_minting_script_context as to_minting_script_context_v2,
@@ -44,7 +46,7 @@ class ScriptInvocation:
     script: pycardano.ScriptType
     datum: Optional[pycardano.Datum]
     redeemer: Union[pycardano.Redeemer, pycardano.RedeemerMap]
-    script_context: Union[ScriptContextV1, ScriptContextV2]
+    script_context: Union[ScriptContextV1, ScriptContextV2, ScriptContextV3]
 
 
 def generate_script_contexts(tx_builder: pycardano.TransactionBuilder):
@@ -145,15 +147,15 @@ def generate_script_contexts_resolved(
                     )
                     script_type = ScriptType.PlutusV1
                 except Exception as e:
-                    raise NotImplementedError(
-                        f"Can not validate spending of non plutus v1 or v2 script (or plutus v1 or v2 script is not in context)"
-                    )
+                    raise NotImplementedError( f"Can not validate spending of non plutus v1, v2 or v3 scripts (or plutus v1, v2 or v3 script is not in context)")
 
         if spending_input.output.datum is not None:
             assert (
                 script_type != ScriptType.PlutusV1
             ), "Only datum hash is supported for plutus v1 scripts"
             datum = spending_input.output.datum
+            if not isinstance(datum, PlutusData):
+                datum = pycardano.RawPlutusData(datum)
         elif spending_input.output.datum_hash is not None:
             datum_h = spending_input.output.datum_hash
             try:
@@ -162,6 +164,8 @@ def generate_script_contexts_resolved(
                     for d in tx.transaction_witness_set.plutus_data or []
                     if datum_hash(d) == datum_h
                 )
+                if not isinstance(datum, PlutusData):
+                    datum = pycardano.RawPlutusData(datum)
             except StopIteration:
                 raise ValueError(
                     f"No datum with hash '{datum_h.payload.hex()}' provided for transaction"
@@ -242,7 +246,7 @@ def generate_script_contexts_resolved(
 
         assert (
             minting_script and script_type
-        ), f"Can not validate spending of non plutus v1 or v2 scripts (or plutus v1 or v2 script is not in context)"
+        ), f"Can not validate spending of non plutus v1, v2 or v3 scripts (or plutus v1, v2 or v3 script is not in context)"
 
         if script_type == ScriptType.PlutusV1:
             script_context = to_minting_script_context_v1(tx_info_args, minting_script)
@@ -303,7 +307,7 @@ def generate_script_contexts_resolved(
         )
         assert (
             certificate_script and script_type
-        ), "Can not validate spending of non plutus v1 or v2 scripts (or plutus v1 or v2 script is not in context)"
+        ), f"Can not validate spending of non plutus v1, v2 or v3 scripts (or plutus v1, v2 or v3 script is not in context)"
 
         if script_type == ScriptType.PlutusV1:
             script_context = to_certificate_script_context_v1(tx_info_args, certificate)
@@ -352,7 +356,7 @@ def generate_script_contexts_resolved(
         )
         assert (
             withdrawal_script and script_type
-        ), "Can not validate spending of non plutus v1 or v2 scripts (or plutus v1 or v2 script is not in context)"
+        ), f"Can not validate spending of non plutus v1, v2 or v3 scripts (or plutus v1, v2 or v3 script is not in context)"
 
         if script_type == ScriptType.PlutusV1:
             script_context = to_withdrawal_script_context_v1(tx_info_args, script_hash)
@@ -382,7 +386,7 @@ def uplc_plutus_data(a: pycardano.Datum) -> PlutusData:
 
 
 def evaluate_script(script_invocation: ScriptInvocation):
-    uplc_program = uplc_unflat(script_invocation.script)
+    uplc_program = uplc_unflat(cbor2.loads(script_invocation.script))
     args = [script_invocation.redeemer.data, script_invocation.script_context]
     if script_invocation.datum is not None:
         args.insert(0, script_invocation.datum)

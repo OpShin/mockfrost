@@ -17,7 +17,7 @@ jobs:
     runs-on: ubuntu-24.04
     strategy:
       matrix:
-        python-version: [ '3.10', '3.11' ]
+        python-version: ['3.11', '3.12', '3.13', '3.14']
 
     steps:
     - name: Checkout code
@@ -28,15 +28,19 @@ jobs:
       with:
         python-version: ${{ matrix.python-version }}
 
-    - name: Install Poetry
-      uses: snok/install-poetry@v1
+    - name: Install uv
+      uses: astral-sh/setup-uv@v6
 
     - name: Install dependencies
-      run: poetry install --no-interaction --with dev
+      run: |
+        uv sync --dev
+        uv run python -c "from importlib.metadata import version; print(version('cbor2'))" > .cbor2_version
+        CBOR2_VERSION=$(cat .cbor2_version)
+        CBOR2_BUILD_C_EXTENSION=0 uv pip install --no-binary cbor2 "cbor2==$CBOR2_VERSION" --force-reinstall
 
     - name: Run linters
       run: |
-        poetry run black --check .
+        uv run black --check .
 
     - name: Build contracts
       run: |
@@ -44,11 +48,10 @@ jobs:
 
     - name: Test with pytest
       run: |
-        poetry run coverage run -m pytest
-        # add further tests with `poetry run coverage run -a ...`
+        uv run coverage run -m pytest
 
     - name: Upload coverage data to coveralls.io
-      run: poetry run coveralls
+      run: uv run coveralls
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         COVERALLS_FLAG_NAME: ${{ matrix.python-version }}
