@@ -11,6 +11,7 @@ import cbor2
 import pycardano
 from blockfrost import Namespace
 from blockfrost.utils import convert_json_to_object, convert_json_to_pandas
+from ordered_set import OrderedSet
 from pycardano.crypto.bech32 import decode, encode
 from pycardano.pool_params import PoolId
 from pycardano import (
@@ -255,11 +256,13 @@ class MockFrostApi:
             if isinstance(address, bytes):
                 address = pycardano.Address.from_primitive(address)
             staking_part = address.staking_part
+            def listify(scripts: Optional[OrderedSet]):
+                return list(scripts) if scripts else []
             if isinstance(staking_part, pycardano.ScriptHash):
                 scripts = (
-                    (witness_set.plutus_v1_script or [])
-                    + (witness_set.plutus_v2_script or [])
-                    + (witness_set.plutus_v3_script or [])
+                    listify(witness_set.plutus_v1_script)
+                    + listify(witness_set.plutus_v2_script)
+                    + listify(witness_set.plutus_v3_script)
                 )
                 return staking_part in [
                     pycardano.plutus_script_hash(s) for s in scripts

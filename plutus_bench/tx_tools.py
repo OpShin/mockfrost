@@ -287,27 +287,29 @@ def generate_script_contexts_resolved(
             ),
             (None, None),
         )
-        certificate_script, script_type = next(
-            (
-                (s, ScriptType.PlutusV2)
-                for s in tx.transaction_witness_set.plutus_v2_script or []
-                if plutus_script_hash(PlutusV2Script(s))
-                == certificate.stake_credential.credential
-            ),
-            (certificate_script, script_type),
-        )
-        certificate_script, script_type = next(
-            (
-                (s, ScriptType.PlutusV3)
-                for s in tx.transaction_witness_set.plutus_v2_script or []
-                if plutus_script_hash(PlutusV3Script(s))
-                         == certificate.stake_credential.credential
-            ),
-            (certificate_script, script_type),
-        )
+        if not certificate_script:
+            certificate_script, script_type = next(
+                (
+                    (s, ScriptType.PlutusV2)
+                    for s in tx.transaction_witness_set.plutus_v2_script or []
+                    if plutus_script_hash(PlutusV2Script(s))
+                    == certificate.stake_credential.credential
+                ),
+                (certificate_script, script_type),
+            )
+        if not certificate_script:
+            certificate_script, script_type = next(
+                (
+                    (s, ScriptType.PlutusV3)
+                    for s in tx.transaction_witness_set.plutus_v3_script or []
+                    if plutus_script_hash(PlutusV3Script(s))
+                             == certificate.stake_credential.credential
+                ),
+                (certificate_script, script_type),
+            )
         assert (
             certificate_script and script_type
-        ), f"Can not validate spending of non plutus v1, v2 or v3 scripts (or plutus v1, v2 or v3 script is not in context)"
+        ), f"Can not validate certification of non plutus v1, v2 or v3 scripts (or plutus v1, v2 or v3 script is not in context)"
 
         if script_type == ScriptType.PlutusV1:
             script_context = to_certificate_script_context_v1(tx_info_args, certificate)
@@ -346,17 +348,27 @@ def generate_script_contexts_resolved(
             ),
             (None, None),
         )
-        withdrawal_script, script_type = next(
-            (
-                (s, ScriptType.PlutusV2)
-                for s in tx.transaction_witness_set.plutus_v2_script or []
-                if plutus_script_hash(PlutusV2Script(s)) == script_hash
-            ),
-            (withdrawal_script, script_type),
-        )
+        if withdrawal_script is None:
+            withdrawal_script, script_type = next(
+                (
+                    (s, ScriptType.PlutusV2)
+                    for s in tx.transaction_witness_set.plutus_v2_script or []
+                    if plutus_script_hash(PlutusV2Script(s)) == script_hash
+                ),
+                (withdrawal_script, script_type),
+            )
+        if withdrawal_script is None:
+            withdrawal_script, script_type = next(
+                (
+                    (s, ScriptType.PlutusV3)
+                    for s in tx.transaction_witness_set.plutus_v3_script or []
+                    if plutus_script_hash(PlutusV3Script(s)) == script_hash
+                ),
+                (withdrawal_script, script_type),
+            )
         assert (
             withdrawal_script and script_type
-        ), f"Can not validate spending of non plutus v1, v2 or v3 scripts (or plutus v1, v2 or v3 script is not in context)"
+        ), f"Can not validate withdrawal of non plutus v1, v2 or v3 scripts (or plutus v1, v2 or v3 script is not in context)"
 
         if script_type == ScriptType.PlutusV1:
             script_context = to_withdrawal_script_context_v1(tx_info_args, script_hash)

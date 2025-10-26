@@ -81,7 +81,6 @@ def test_register_and_delegate_no_script():
     )
 
 
-@unittest.skip
 def test_withdraw():
     api = MockFrostApi()
     context = MockChainContext(api=api)
@@ -107,7 +106,6 @@ def test_withdraw():
     )
 
 
-@unittest.skip
 def test_withdraw_rewards():
     api = MockFrostApi()
     context = MockChainContext(api=api)
