@@ -7,5 +7,5 @@ DIR=$(dirname "${BASH_SOURCE[0]}")
 cd $DIR
 
 uv run opshin build contracts/gift.py
-uv run opshin build contracts/signed_mint.py
-uv run opshin build contracts/unrealistic_staking.py --parameters 2
+uv run opshin build contracts/signed_mint.py --parameters 1
+uv run opshin build contracts/unrealistic_staking.py --parameters 1

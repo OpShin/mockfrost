@@ -237,7 +237,7 @@ def generate_script_contexts_resolved(
                 next(
                     (
                         (s, ScriptType.PlutusV3)
-                        for s in tx.transaction_witness_set.plutus_v2_script or []
+                        for s in tx.transaction_witness_set.plutus_v3_script or []
                         if plutus_script_hash(PlutusV3Script(s)) == minting_script_hash
                     ),
                     (minting_script, script_type),

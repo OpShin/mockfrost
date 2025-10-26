@@ -1,7 +1,7 @@
 from opshin.prelude import *
 
 
-def validator(address: Address, redeemer: BuiltinData, context: ScriptContext) -> None:
+def validator(address: Address, context: ScriptContext) -> None:
     purpose = context.purpose
     if isinstance(purpose, Publishing):
         return None  # Do whatever you like with certifiying

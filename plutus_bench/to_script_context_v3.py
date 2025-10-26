@@ -3,7 +3,6 @@ from collections import defaultdict
 from typing import Optional, Tuple, cast
 
 import pycardano
-from pycardano import CommitteeColdCredentialEpochMap, RedeemerTag
 
 from .ledger.api_v3 import *
 
