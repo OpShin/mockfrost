@@ -13,7 +13,7 @@ def spend_from_gift_contract(
     enforce_true_owner: bool = True,
     set_required_signers: bool = True,
     redeemer: pycardano.Redeemer = None,
-    script_type: pycardano.ScriptType = ScriptType.PlutusV2,
+    script_type: pycardano.ScriptType = ScriptType.PlutusV3,
 ):
     network = context.network
     gift_contract = load_contract(gift_contract_path, script_type)

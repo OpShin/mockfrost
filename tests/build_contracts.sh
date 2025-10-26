@@ -6,6 +6,6 @@
 DIR=$(dirname "${BASH_SOURCE[0]}")
 cd $DIR
 
-poetry run opshin build spending contracts/gift.py
-poetry run opshin build minting contracts/signed_mint.py
-poetry run opshin build rewarding contracts/unrealistic_staking.py
+uv run opshin build contracts/gift.py
+uv run opshin build contracts/signed_mint.py
+uv run opshin build contracts/unrealistic_staking.py --parameters 2
