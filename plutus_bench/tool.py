@@ -36,6 +36,8 @@ def load_contract(
             with open(plutus_script, "r") as f:
                 script_dict = json.load(f)
             script = cbor2.loads(bytes.fromhex(script_dict["cborHex"]))
+            # .plutus is double-cbor wrapped
+            script = cbor2.loads(script)
         except (json.JSONDecodeError, UnicodeDecodeError, ValueError) as e:
             pass
     if script is None:

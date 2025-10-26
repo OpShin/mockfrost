@@ -386,10 +386,12 @@ def uplc_plutus_data(a: pycardano.Datum) -> PlutusData:
 
 
 def evaluate_script(script_invocation: ScriptInvocation):
-    uplc_program = uplc_unflat(cbor2.loads(script_invocation.script))
-    args = [script_invocation.redeemer.data, script_invocation.script_context]
-    if script_invocation.datum is not None:
-        args.insert(0, script_invocation.datum)
+    uplc_program = uplc_unflat(script_invocation.script)
+    args = [script_invocation.script_context]
+    if isinstance(script_invocation.script, (PlutusV1Script, PlutusV2Script)):
+        args.insert(0, script_invocation.redeemer.data)
+        if script_invocation.datum is not None:
+            args.insert(0, script_invocation.datum)
     args = [uplc_plutus_data(a) for a in args]
     allowed_cpu_steps = script_invocation.redeemer.ex_units.steps
     allowed_mem_steps = script_invocation.redeemer.ex_units.mem
@@ -397,9 +399,12 @@ def evaluate_script(script_invocation: ScriptInvocation):
         uplc.tools.apply(uplc_program, *args),
         budget=uplc.cost_model.Budget(allowed_cpu_steps, allowed_mem_steps),
     )
+    result = res.result
+    if isinstance(script_invocation.script, PlutusV3Script) and result is uplc.ast.BuiltinUnit():
+        result = AssertionError("Result of executing PlutusV3 script is not Unit(). Therefore the script is considered failed")
     logs = res.logs
     return (
-        (res.result),
+        (result),
         (
             res.cost.cpu,
             res.cost.memory,
