@@ -1,7 +1,6 @@
 from typing import Optional, Tuple
 
 import pycardano
-from pycardano import RawPlutusData
 
 from .ledger.api_v2 import *
 
@@ -190,12 +189,12 @@ def to_tx_info(
 ):
     tx_body = tx.transaction_body
     datums = [
-        RawPlutusData(o.datum)
+        pycardano.RawPlutusData(o.datum)
         for o in tx_body.outputs + resolved_inputs + resolved_reference_inputs
         if o.datum is not None
     ]
     if tx.transaction_witness_set.plutus_data:
-        datums += [RawPlutusData(x) for x in tx.transaction_witness_set.plutus_data]
+        datums += [pycardano.RawPlutusData(x) for x in tx.transaction_witness_set.plutus_data]
 
     redeemers = (
         tx.transaction_witness_set.redeemer
