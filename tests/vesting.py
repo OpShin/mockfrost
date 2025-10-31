@@ -23,9 +23,7 @@ def give(
     builder = pycardano.TransactionBuilder(context)
     builder.add_input_address(payment_address)
     builder.add_output(
-        pycardano.TransactionOutput(
-            script_address, give_value
-        ),
+        pycardano.TransactionOutput(script_address, give_value),
         datum,
         add_datum_to_witness=True,
     )

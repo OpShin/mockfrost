@@ -220,7 +220,9 @@ class SomeDatumHash(PlutusData):
     CONSTR_ID = 1
     datum_hash: DatumHash
 
+
 ScriptHash = bytes
+
 
 @dataclass(unsafe_hash=True)
 class SomeScriptHash(PlutusData):
@@ -630,14 +632,17 @@ class GAUpdateCommittee(PlutusData):
 
 AnchorDataHash = bytes
 
+
 @dataclass(unsafe_hash=True)
 class Anchor(PlutusData):
     """
     Represents a proposal procedure in governance.
     """
+
     CONSTR_ID = 0
     url: bytes
     data_hash: AnchorDataHash
+
 
 @dataclass(unsafe_hash=True)
 class Constitution(PlutusData):
@@ -679,6 +684,7 @@ class ProposalProcedure(PlutusData):
     """
     Represents a proposal procedure in governance.
     """
+
     CONSTR_ID = 0
 
     deposit: Lovelace

@@ -40,7 +40,9 @@ def test_vesting_v3_script():
     vesting_script = load_contract(
         own_path.parent / "assets/vesting_v3.plutus", ScriptType.PlutusV3
     )
-    current_time = int(datetime.datetime.now().timestamp()) # int(datetime.datetime(2020, 1, 1).timestamp())
+    current_time = int(
+        datetime.datetime.now().timestamp()
+    )  # int(datetime.datetime(2020, 1, 1).timestamp())
 
     datum = VestingDatum(
         beneficiary=bytes(taker.verification_key.hash()),

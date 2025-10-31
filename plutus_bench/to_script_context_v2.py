@@ -194,7 +194,9 @@ def to_tx_info(
         if o.datum is not None
     ]
     if tx.transaction_witness_set.plutus_data:
-        datums += [pycardano.RawPlutusData(x) for x in tx.transaction_witness_set.plutus_data]
+        datums += [
+            pycardano.RawPlutusData(x) for x in tx.transaction_witness_set.plutus_data
+        ]
 
     redeemers = (
         tx.transaction_witness_set.redeemer

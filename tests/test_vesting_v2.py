@@ -40,14 +40,16 @@ def test_vesting_v2_script():
     vesting_script = load_contract(
         own_path.parent / "assets/vesting_v2.plutus", ScriptType.PlutusV2
     )
-    current_time = int(datetime.datetime.now().timestamp()) # int(datetime.datetime(2020, 1, 1).timestamp())
+    current_time = int(
+        datetime.datetime.now().timestamp()
+    )  # int(datetime.datetime(2020, 1, 1).timestamp())
 
     datum = VestingDatum(
         beneficiary=bytes(taker.verification_key.hash()),
         deadline=int(current_time) * 1000,  # must be in milliseconds
     )
 
-    give(giver.signing_key,vesting_script, context, 50_000_000, datum)
+    give(giver.signing_key, vesting_script, context, 50_000_000, datum)
 
     redeemer = pycardano.Redeemer(VestingRedeemer())
     param = api.genesis_param

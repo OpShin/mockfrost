@@ -256,8 +256,10 @@ class MockFrostApi:
             if isinstance(address, bytes):
                 address = pycardano.Address.from_primitive(address)
             staking_part = address.staking_part
+
             def listify(scripts: Optional[OrderedSet]):
                 return list(scripts) if scripts else []
+
             if isinstance(staking_part, pycardano.ScriptHash):
                 scripts = (
                     listify(witness_set.plutus_v1_script)

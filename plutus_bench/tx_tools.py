@@ -147,7 +147,9 @@ def generate_script_contexts_resolved(
                     )
                     script_type = ScriptType.PlutusV1
                 except Exception as e:
-                    raise NotImplementedError( f"Can not validate spending of non plutus v1, v2 or v3 scripts (or plutus v1, v2 or v3 script is not in context)")
+                    raise NotImplementedError(
+                        f"Can not validate spending of non plutus v1, v2 or v3 scripts (or plutus v1, v2 or v3 script is not in context)"
+                    )
 
         if spending_input.output.datum is not None:
             assert (
@@ -184,9 +186,7 @@ def generate_script_contexts_resolved(
                 tx_info_args, spending_input.input
             )
         elif script_type is ScriptType.PlutusV3:
-            script_context = to_script_context_v3(
-                tx_info_args, spending_redeemer
-            )
+            script_context = to_script_context_v3(tx_info_args, spending_redeemer)
         else:
             raise NotImplementedError()
 
@@ -222,26 +222,22 @@ def generate_script_contexts_resolved(
             (None, None),
         )
         if not minting_script:
-            minting_script, script_type = (
-                next(
-                    (
-                        (s, ScriptType.PlutusV2)
-                        for s in tx.transaction_witness_set.plutus_v2_script or []
-                        if plutus_script_hash(PlutusV2Script(s)) == minting_script_hash
-                    ),
-                    (minting_script, script_type),
-                )
+            minting_script, script_type = next(
+                (
+                    (s, ScriptType.PlutusV2)
+                    for s in tx.transaction_witness_set.plutus_v2_script or []
+                    if plutus_script_hash(PlutusV2Script(s)) == minting_script_hash
+                ),
+                (minting_script, script_type),
             )
         if not minting_script:
-            minting_script, script_type = (
-                next(
-                    (
-                        (s, ScriptType.PlutusV3)
-                        for s in tx.transaction_witness_set.plutus_v3_script or []
-                        if plutus_script_hash(PlutusV3Script(s)) == minting_script_hash
-                    ),
-                    (minting_script, script_type),
-                )
+            minting_script, script_type = next(
+                (
+                    (s, ScriptType.PlutusV3)
+                    for s in tx.transaction_witness_set.plutus_v3_script or []
+                    if plutus_script_hash(PlutusV3Script(s)) == minting_script_hash
+                ),
+                (minting_script, script_type),
             )
 
         assert (
@@ -303,7 +299,7 @@ def generate_script_contexts_resolved(
                     (s, ScriptType.PlutusV3)
                     for s in tx.transaction_witness_set.plutus_v3_script or []
                     if plutus_script_hash(PlutusV3Script(s))
-                             == certificate.stake_credential.credential
+                    == certificate.stake_credential.credential
                 ),
                 (certificate_script, script_type),
             )
@@ -412,8 +408,13 @@ def evaluate_script(script_invocation: ScriptInvocation):
         budget=uplc.cost_model.Budget(allowed_cpu_steps, allowed_mem_steps),
     )
     result = res.result
-    if isinstance(script_invocation.script, PlutusV3Script) and result is uplc.ast.BuiltinUnit():
-        result = AssertionError("Result of executing PlutusV3 script is not Unit(). Therefore the script is considered failed")
+    if (
+        isinstance(script_invocation.script, PlutusV3Script)
+        and result is uplc.ast.BuiltinUnit()
+    ):
+        result = AssertionError(
+            "Result of executing PlutusV3 script is not Unit(). Therefore the script is considered failed"
+        )
     logs = res.logs
     return (
         (result),

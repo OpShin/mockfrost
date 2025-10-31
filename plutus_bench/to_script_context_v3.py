@@ -32,7 +32,9 @@ def to_staking_hash(
     raise NotImplementedError(f"Unknown stake key type {type(sk)}")
 
 
-def to_withdrawal(wdrl: Optional[pycardano.Withdrawals]) -> Dict[StakingCredential, int]:
+def to_withdrawal(
+    wdrl: Optional[pycardano.Withdrawals],
+) -> Dict[StakingCredential, int]:
     if wdrl is None:
         return {}
 
@@ -109,6 +111,7 @@ def value_to_value(v: pycardano.Value):
     ma[b""] = {b"": v.coin}
     return ma
 
+
 def to_script_credential(credential: pycardano.ScriptHash) -> ScriptCredential:
     assert isinstance(credential, pycardano.ScriptHash)
     return ScriptCredential(credential.payload)
@@ -176,20 +179,21 @@ def to_redeemer_purpose(
         return Voting(to_voter(sorted(tx_body.voting_procedures.keys())[r.index]))
     elif v == pycardano.RedeemerTag.PROPOSING:
         return Proposing(
-            r.index,
-            to_proposal_procedure(sorted(tx_body.proposal_procedures)[r.index])
+            r.index, to_proposal_procedure(sorted(tx_body.proposal_procedures)[r.index])
         )
     else:
         raise NotImplementedError()
 
+
 def to_credential(
-        credential: Union[pycardano.VerificationKeyHash, pycardano.ScriptHash],
+    credential: Union[pycardano.VerificationKeyHash, pycardano.ScriptHash],
 ) -> Credential:
     if isinstance(credential, pycardano.VerificationKeyHash):
         return PubKeyCredential(credential.payload)
     if isinstance(credential, pycardano.ScriptHash):
         return ScriptCredential(credential.payload)
     raise NotImplementedError(f"Unknown credential type {type(credential)}")
+
 
 def to_voter(voter: pycardano.Voter) -> Voter:
     if voter.voter_type == pycardano.VoterType.DREP:
@@ -215,42 +219,50 @@ def to_gov_action_id(gov_action_id: pycardano.GovActionId) -> GovernanceActionId
     )
 
 
-def to_votes(voting_procedures: Optional[pycardano.VotingProcedures] = None) -> Dict[Voter, Dict[GovernanceActionId, Vote]]:
+def to_votes(
+    voting_procedures: Optional[pycardano.VotingProcedures] = None,
+) -> Dict[Voter, Dict[GovernanceActionId, Vote]]:
     if voting_procedures is None:
         return {}
     res_dict = defaultdict(dict)
     for voter, gov_actions in voting_procedures.to_shallow_primitive().items():
-        for gov_action_id, gov_action in cast(gov_actions, pycardano.GovActionIdToVotingProcedure()).items():
+        for gov_action_id, gov_action in cast(
+            gov_actions, pycardano.GovActionIdToVotingProcedure()
+        ).items():
             res_dict[to_voter(voter)][to_gov_action_id(gov_action_id)] = gov_action
     return dict(res_dict)
 
-def to_maybe_governance_action_id(gov_action_id: Optional[pycardano.GovActionId]) -> MaybeGovernanceActionId:
+
+def to_maybe_governance_action_id(
+    gov_action_id: Optional[pycardano.GovActionId],
+) -> MaybeGovernanceActionId:
     if gov_action_id is None:
         return NoGovernanceActionId()
     return SomeGovernanceActionId(
         to_gov_action_id(gov_action_id),
     )
 
+
 def to_protocol_parameters_update(
-        protocol_parameters: pycardano.ProtocolParamUpdate,
+    protocol_parameters: pycardano.ProtocolParamUpdate,
 ) -> Dict[int, Datum]:
     # TODO
     return {}
 
+
 def to_maybe_script_credential(
-        policy_hash: Optional[pycardano.PolicyHash] = None,
+    policy_hash: Optional[pycardano.PolicyHash] = None,
 ) -> Union[SomeScriptHash, NoScriptHash]:
     if policy_hash is None:
         return NoScriptHash()
     return SomeScriptHash(policy_hash.payload)
 
+
 def to_evicted_members(
-        committee_cold_credentials: pycardano.OrderedSet[pycardano.CommitteeColdCredential],
+    committee_cold_credentials: pycardano.OrderedSet[pycardano.CommitteeColdCredential],
 ) -> List[Credential]:
-    return [
-        to_credential(x.credential)
-        for x in committee_cold_credentials
-    ]
+    return [to_credential(x.credential) for x in committee_cold_credentials]
+
 
 def to_added_members(
     commitee_cold_credential_epoch_map: pycardano.CommitteeColdCredentialEpochMap,
@@ -260,21 +272,24 @@ def to_added_members(
         res[to_credential(cold_credential.credential)] = epoch
     return res
 
+
 def to_treasury_withdrawals(
-        treasury_withdrawals: pycardano.TreasuryWithdrawal
+    treasury_withdrawals: pycardano.TreasuryWithdrawal,
 ) -> Dict[Credential, Lovelace]:
     res_dict = {}
     for recipient, amount in treasury_withdrawals.to_shallow_primitive():
         res_dict[to_credential(recipient.credential)] = amount
     return res_dict
 
+
 def to_fraction(
-        fraction: fractions.Fraction,
+    fraction: fractions.Fraction,
 ) -> Fraction:
     return Fraction(
         fraction.numerator,
         fraction.denominator,
     )
+
 
 def to_anchor(anchor: pycardano.Anchor) -> Anchor:
     return Anchor(
@@ -282,25 +297,32 @@ def to_anchor(anchor: pycardano.Anchor) -> Anchor:
         data_hash=anchor.data_hash.payload,
     )
 
+
 def to_constitution(
-        constitution: Tuple[Anchor, Optional[ScriptHash]],
+    constitution: Tuple[Anchor, Optional[ScriptHash]],
 ) -> Constitution:
     return Constitution(
         anchor=to_anchor(constitution[0]),
         guardrails=to_maybe_script_credential(constitution[1]),
     )
 
+
 def to_gov_action(gov_action: pycardano.GovAction) -> GovernanceAction:
     if isinstance(gov_action, pycardano.ParameterChangeAction):
         return GAParameterChange(
-            ancestor = to_maybe_governance_action_id(gov_action.gov_action_id),
-            new_parameters=to_protocol_parameters_update(gov_action.protocol_param_update),
+            ancestor=to_maybe_governance_action_id(gov_action.gov_action_id),
+            new_parameters=to_protocol_parameters_update(
+                gov_action.protocol_param_update
+            ),
             guardrails=to_maybe_script_credential(gov_action.policy_hash),
         )
     if isinstance(gov_action, pycardano.HardForkInitiationAction):
         return GAHardForkInitiation(
-            ancestor = to_maybe_governance_action_id(gov_action.gov_action_id),
-            new_version=ProtocolVersion(gov_action.protocol_version.numerator, gov_action.protocol_version.denominator),
+            ancestor=to_maybe_governance_action_id(gov_action.gov_action_id),
+            new_version=ProtocolVersion(
+                gov_action.protocol_version.numerator,
+                gov_action.protocol_version.denominator,
+            ),
         )
     if isinstance(gov_action, pycardano.TreasuryWithdrawalsAction):
         return GATreasuryWithdrawals(
@@ -309,18 +331,18 @@ def to_gov_action(gov_action: pycardano.GovAction) -> GovernanceAction:
         )
     if isinstance(gov_action, pycardano.NoConfidence):
         return GANoConfidence(
-            ancestor = to_maybe_governance_action_id(gov_action.gov_action_id),
+            ancestor=to_maybe_governance_action_id(gov_action.gov_action_id),
         )
     if isinstance(gov_action, pycardano.UpdateCommittee):
         return GAUpdateCommittee(
-            ancestor = to_maybe_governance_action_id(gov_action.gov_action_id),
+            ancestor=to_maybe_governance_action_id(gov_action.gov_action_id),
             evicted_members=to_evicted_members(gov_action.committee_cold_credentials),
             added_members=to_added_members(gov_action.committee_expiration),
             quorum=to_fraction(gov_action.quorum),
         )
     if isinstance(gov_action, pycardano.NewConstitution):
         return GANewConstitution(
-            ancestor = to_maybe_governance_action_id(gov_action.gov_action_id),
+            ancestor=to_maybe_governance_action_id(gov_action.gov_action_id),
             constitution=to_constitution(gov_action.constitution),
         )
     if isinstance(gov_action, pycardano.InfoAction):
@@ -329,7 +351,7 @@ def to_gov_action(gov_action: pycardano.GovAction) -> GovernanceAction:
 
 
 def to_proposal_procedure(
-        proposal_procedure: pycardano.ProposalProcedure,
+    proposal_procedure: pycardano.ProposalProcedure,
 ) -> ProposalProcedure:
     return ProposalProcedure(
         deposit=proposal_procedure.deposit,
@@ -338,8 +360,11 @@ def to_proposal_procedure(
         anchor=to_anchor(proposal_procedure.anchor),
     )
 
+
 def to_proposal_procedures(
-        proposal_procedures: Optional[pycardano.NonEmptyOrderedSet[pycardano.ProposalProcedure]]
+    proposal_procedures: Optional[
+        pycardano.NonEmptyOrderedSet[pycardano.ProposalProcedure]
+    ],
 ) -> List[ProposalProcedure]:
     if proposal_procedures is None:
         return []
@@ -348,12 +373,14 @@ def to_proposal_procedures(
         res_list.append(to_proposal_procedure(proposal_procedure))
     return res_list
 
+
 def to_optional_lovelace(
-        amount: Optional[Lovelace],
+    amount: Optional[Lovelace],
 ) -> OptionalLovelace:
     if amount is None:
         return NoValue()
     return BoxedInt(amount)
+
 
 def to_tx_info(
     tx: pycardano.Transaction,
@@ -368,7 +395,9 @@ def to_tx_info(
         if o.datum is not None
     ]
     if tx.transaction_witness_set.plutus_data:
-        datums += [pycardano.RawPlutusData(x) for x in tx.transaction_witness_set.plutus_data]
+        datums += [
+            pycardano.RawPlutusData(x) for x in tx.transaction_witness_set.plutus_data
+        ]
 
     redeemers = (
         tx.transaction_witness_set.redeemer
@@ -415,12 +444,12 @@ def to_script_context(
         pycardano.Transaction,
         List[pycardano.TransactionOutput],
         List[pycardano.TransactionOutput],
-        ...
-    ], redeemer: pycardano.Redeemer
+        ...,
+    ],
+    redeemer: pycardano.Redeemer,
 ):
     return ScriptContext(
         to_tx_info(*tx_info_args),
         redeemer.data,
         to_redeemer_purpose(redeemer, tx_info_args[0].transaction_body),
     )
-
