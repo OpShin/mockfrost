@@ -20,7 +20,7 @@ def test_spend_from_gift_contract():
     payment_key.fund(100_000_000)
     gift_contract_path = own_path.parent / "assets/gift.plutus"
     gift_address = address_from_script(
-        load_contract(gift_contract_path, ScriptType.PlutusV2), network=context.network
+        load_contract(gift_contract_path, ScriptType.PlutusV3), network=context.network
     )
     api.add_txout(
         pycardano.TransactionOutput(
@@ -41,7 +41,7 @@ def test_other_user_spend_from_gift_contract():
     owning_user = MockUser(api)
     gift_contract_path = own_path.parent / "build" / "gift" / "script.plutus"
     gift_address = address_from_script(
-        load_contract(gift_contract_path, ScriptType.PlutusV2), network=context.network
+        load_contract(gift_contract_path, ScriptType.PlutusV3), network=context.network
     )
     api.add_txout(
         pycardano.TransactionOutput(

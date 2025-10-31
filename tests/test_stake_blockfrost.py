@@ -54,7 +54,6 @@ def test_register_and_delegate(server):
     )
 
 
-@unittest.skip
 def test_withdraw(server):
     # api = MockFrostApi()
     # context = MockChainContext(api=api)

@@ -2,8 +2,9 @@
 from opshin.prelude import *
 
 
-def validator(pubkeyhash: bytes, redeemer: None, context: ScriptContext) -> None:
-    sig_present = pubkeyhash in context.tx_info.signatories
+def validator(context: ScriptContext) -> None:
+    pubkeyhash: bytes = own_datum_unsafe(context)
+    sig_present = pubkeyhash in context.transaction.signatories
     assert (
         sig_present
-    ), f"Required signature missing, expected {pubkeyhash.hex()} but got {[s.hex() for s in context.tx_info.signatories]}"
+    ), f"Required signature missing, expected {pubkeyhash.hex()} but got {[s.hex() for s in context.transaction.signatories]}"

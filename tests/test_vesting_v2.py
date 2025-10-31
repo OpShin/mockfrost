@@ -1,3 +1,4 @@
+import datetime
 import pathlib
 from dataclasses import dataclass
 import pycardano
@@ -39,15 +40,16 @@ def test_vesting_v2_script():
     vesting_script = load_contract(
         own_path.parent / "assets/vesting_v2.plutus", ScriptType.PlutusV2
     )
-    script = pycardano.PlutusV2Script(cbor2.loads(vesting_script))
-    current_time = time.time()
+    current_time = int(
+        datetime.datetime.now().timestamp()
+    )  # int(datetime.datetime(2020, 1, 1).timestamp())
 
     datum = VestingDatum(
         beneficiary=bytes(taker.verification_key.hash()),
         deadline=int(current_time) * 1000,  # must be in milliseconds
     )
 
-    give(giver.signing_key, script, context, 50_000_000, datum)
+    give(giver.signing_key, vesting_script, context, 50_000_000, datum)
 
     redeemer = pycardano.Redeemer(VestingRedeemer())
     param = api.genesis_param
@@ -62,7 +64,7 @@ def test_vesting_v2_script():
         TransactionFailedException,
         take,
         taker.signing_key,
-        script,
+        vesting_script,
         redeemer,
         context,
         25_000_000,
@@ -71,7 +73,7 @@ def test_vesting_v2_script():
 
     offset = 1000
     api.set_block_slot(int((current_time - system_start) / slot_length) + offset)
-    take(taker.signing_key, script, redeemer, context, 25_000_000, datum=datum)
+    take(taker.signing_key, vesting_script, redeemer, context, 25_000_000, datum=datum)
 
 
 if __name__ == "__main__":

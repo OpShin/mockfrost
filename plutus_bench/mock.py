@@ -11,6 +11,7 @@ import cbor2
 import pycardano
 from blockfrost import Namespace
 from blockfrost.utils import convert_json_to_object, convert_json_to_pandas
+from ordered_set import OrderedSet
 from pycardano.crypto.bech32 import decode, encode
 from pycardano.pool_params import PoolId
 from pycardano import (
@@ -255,11 +256,15 @@ class MockFrostApi:
             if isinstance(address, bytes):
                 address = pycardano.Address.from_primitive(address)
             staking_part = address.staking_part
+
+            def listify(scripts: Optional[OrderedSet]):
+                return list(scripts) if scripts else []
+
             if isinstance(staking_part, pycardano.ScriptHash):
                 scripts = (
-                    (witness_set.plutus_v1_script or [])
-                    + (witness_set.plutus_v2_script or [])
-                    + (witness_set.plutus_v3_script or [])
+                    listify(witness_set.plutus_v1_script)
+                    + listify(witness_set.plutus_v2_script)
+                    + listify(witness_set.plutus_v3_script)
                 )
                 return staking_part in [
                     pycardano.plutus_script_hash(s) for s in scripts
@@ -348,10 +353,6 @@ class MockFrostApi:
         ex_units_mem_budget = self.protocol_param.max_tx_ex_mem
         for invocation in script_invocations:
             # run opshin script if available
-            if self.opshin_scripts.get(invocation.script) is not None:
-                raise NotImplementedError("This code never seems to be reached")
-                opshin_validator = self.opshin_scripts[invocation.script]
-                evaluate_opshin_validator(opshin_validator, invocation)
             redeemer = invocation.redeemer
             if redeemer.ex_units.steps <= 0 and redeemer.ex_units.mem <= 0:
                 redeemer.ex_units = ExecutionUnits(
@@ -618,7 +619,7 @@ class MockFrostApi:
         return self.transaction_submit_raw(tx_cbor)
 
     @request_wrapper
-    def transaction_evaluate_raw(self, tx_cbor: bytes, **kwargs):
+    def transaction_evaluate_raw(self, tx_cbor: Union[bytes, str], **kwargs):
         try:
             if len(tx_cbor) > self.protocol_param.max_tx_size:
                 raise InvalidTransactionError(

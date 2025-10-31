@@ -11,6 +11,7 @@ class ScriptType(Enum):
     NativeScript = "NativeScript"
     PlutusV1 = "PlutusV1"
     PlutusV2 = "PlutusV2"
+    PlutusV3 = "PlutusV3"
 
 
 def load_contract(
@@ -35,6 +36,8 @@ def load_contract(
             with open(plutus_script, "r") as f:
                 script_dict = json.load(f)
             script = cbor2.loads(bytes.fromhex(script_dict["cborHex"]))
+            # .plutus is double-cbor wrapped
+            script = cbor2.loads(script)
         except (json.JSONDecodeError, UnicodeDecodeError, ValueError) as e:
             pass
     if script is None:
@@ -45,6 +48,8 @@ def load_contract(
         return pycardano.PlutusV1Script(script)
     elif plutus_version == ScriptType.PlutusV2:
         return pycardano.PlutusV2Script(script)
+    elif plutus_version == ScriptType.PlutusV3:
+        return pycardano.PlutusV3Script(script)
     else:
         raise ValueError(f"Unsupported script type {plutus_version}")
 

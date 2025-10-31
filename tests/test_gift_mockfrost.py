@@ -40,7 +40,7 @@ def test_spend_from_gift_contract(server):
     payment_key.fund(100_000_000)
     gift_contract_path = own_path.parent / "build" / "gift" / "script.plutus"
     gift_address = address_from_script(
-        load_contract(gift_contract_path, ScriptType.PlutusV2), network=context.network
+        load_contract(gift_contract_path, ScriptType.PlutusV3), network=context.network
     )
     session.add_txout(
         pycardano.TransactionOutput(
@@ -62,7 +62,7 @@ def test_other_user_spend_from_gift_contract(server):
     owning_user = MockFrostUser(session)
     gift_contract_path = own_path.parent / "build" / "gift" / "script.plutus"
     gift_address = address_from_script(
-        load_contract(gift_contract_path, ScriptType.PlutusV2), network=context.network
+        load_contract(gift_contract_path, ScriptType.PlutusV3), network=context.network
     )
     session.add_txout(
         pycardano.TransactionOutput(

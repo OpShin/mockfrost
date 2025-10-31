@@ -8,7 +8,7 @@ from plutus_bench.tool import load_contract, ScriptType, address_from_script
 
 def give(
     payment_key: pycardano.PaymentSigningKey,
-    script: pycardano.PlutusV1Script,
+    script: pycardano.ScriptType,
     context: ChainContext,
     give_value: int,
     datum=pycardano.Unit(),
@@ -23,9 +23,9 @@ def give(
     builder = pycardano.TransactionBuilder(context)
     builder.add_input_address(payment_address)
     builder.add_output(
-        pycardano.TransactionOutput(
-            script_address, give_value, datum_hash=pycardano.datum_hash(datum)
-        )
+        pycardano.TransactionOutput(script_address, give_value),
+        datum,
+        add_datum_to_witness=True,
     )
     signed_tx = builder.build_and_sign(
         [
@@ -38,7 +38,7 @@ def give(
 
 def take(
     taker_key: pycardano.PaymentSigningKey,
-    script: pycardano.PlutusV1Script,
+    script: pycardano.PlutusScript,
     redeemer: pycardano.Redeemer,
     context: ChainContext,
     value: int,
