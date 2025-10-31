@@ -5,9 +5,9 @@ name: Tests and QA
 
 on:
   push:
-    branches: "*"
+    branches: "**"
   pull_request:
-    branches: "*"
+    branches: "**"
 
 permissions:
   contents: read
