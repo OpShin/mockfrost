@@ -770,17 +770,13 @@ wheels = [
 [[package]]
 name = "opshin"
 version = "0.27.0"
-source = { registry = "https://pypi.org/simple" }
+source = { git = "https://github.com/Opshin/opshin?rev=e0dfca6f58467d8bce0181b971f7d928bd159877#e0dfca6f58467d8bce0181b971f7d928bd159877" }
 dependencies = [
     { name = "frozenlist2" },
     { name = "ordered-set" },
     { name = "pluthon" },
     { name = "pycardano" },
     { name = "uplc" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/b6/27/2eb84f244c43178815b66bf1a35b115fcf71b7ec71735f1ed21e25b307c3/opshin-0.27.0.tar.gz", hash = "sha256:191eef62bdf7c5dcb32ac71e1afbed1aa9814ad5d8a4e4a37a7546e9b6a6e6a2", size = 93329, upload-time = "2025-10-19T14:08:02.953Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/c4/f9/d34f08d599fcc989bd9cb541bb515c44084a1f28df284010c97efca176f1/opshin-0.27.0-py3-none-any.whl", hash = "sha256:9924939620fab9263761b82f4268f2f9279a609403c4fa01c8c614670ec689cc", size = 111941, upload-time = "2025-10-19T14:08:01.923Z" },
 ]
 
 [[package]]
@@ -943,7 +939,7 @@ dev = [
 requires-dist = [
     { name = "fastapi", specifier = ">=0.110.1" },
     { name = "httpx", specifier = ">=0.27.0" },
-    { name = "opshin", specifier = ">=0.27.0" },
+    { name = "opshin", git = "https://github.com/Opshin/opshin?rev=e0dfca6f58467d8bce0181b971f7d928bd159877" },
     { name = "pycardano", git = "https://github.com/Python-Cardano/pycardano?rev=70a7a3b5027eac00b850f0f2b997a141c86fe665" },
     { name = "pytest", specifier = ">=8.4.2" },
     { name = "python-dotenv", specifier = ">=1.1.0" },
@@ -959,7 +955,7 @@ dev = [
     { name = "coverage" },
     { name = "coveralls", specifier = ">=4.0.1" },
     { name = "hypothesis", specifier = ">=6.98.2" },
-    { name = "opshin", specifier = ">=0.27.0" },
+    { name = "opshin", git = "https://github.com/Opshin/opshin?rev=e0dfca6f58467d8bce0181b971f7d928bd159877" },
     { name = "parameterized", specifier = ">=0.9.0" },
     { name = "pre-commit", specifier = ">=3.3.2" },
     { name = "pytest", specifier = ">=7.3.1" },

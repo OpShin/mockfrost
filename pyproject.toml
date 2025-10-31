@@ -35,6 +35,7 @@ dev = [
 
 [tool.uv.sources]
 pycardano = { git = "https://github.com/Python-Cardano/pycardano", rev = "70a7a3b5027eac00b850f0f2b997a141c86fe665" }
+opshin = {git = "https://github.com/Opshin/opshin", rev = "e0dfca6f58467d8bce0181b971f7d928bd159877"}
 
 [tool.hatch.build.targets.sdist]
 include = ["plutus_bench"]
