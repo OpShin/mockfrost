@@ -106,7 +106,7 @@ def test_max_resource_limits(server):
     payment_key.fund(100_000_000)
     # This should exceed max contract size
     gift_contract_path = own_path.parent / "build" / "gift" / "script.plutus"
-    gift_contract = load_contract(gift_contract_path, ScriptType.PlutusV2)
+    gift_contract = load_contract(gift_contract_path, ScriptType.PlutusV3)
     gift_address = address_from_script(gift_contract, network=context.network)
     session.add_txout(
         pycardano.TransactionOutput(

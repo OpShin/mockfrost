@@ -944,7 +944,7 @@ requires-dist = [
     { name = "fastapi", specifier = ">=0.110.1" },
     { name = "httpx", specifier = ">=0.27.0" },
     { name = "opshin", specifier = ">=0.27.0" },
-    { name = "pycardano", git = "https://github.com/Python-Cardano/pycardano?branch=main" },
+    { name = "pycardano", git = "https://github.com/Python-Cardano/pycardano?rev=70a7a3b5027eac00b850f0f2b997a141c86fe665" },
     { name = "pytest", specifier = ">=8.4.2" },
     { name = "python-dotenv", specifier = ">=1.1.0" },
     { name = "slowapi", specifier = ">=0.1.9" },
@@ -1023,8 +1023,8 @@ wheels = [
 
 [[package]]
 name = "pycardano"
-version = "0.16.0"
-source = { git = "https://github.com/Python-Cardano/pycardano?branch=main#95e5b02981b569655d143f1bf81669590783ca51" }
+version = "0.17.0"
+source = { git = "https://github.com/Python-Cardano/pycardano?rev=70a7a3b5027eac00b850f0f2b997a141c86fe665#70a7a3b5027eac00b850f0f2b997a141c86fe665" }
 dependencies = [
     { name = "base58" },
     { name = "blockfrost-python" },

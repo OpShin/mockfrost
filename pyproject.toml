@@ -34,7 +34,7 @@ dev = [
 [tool.uv]
 
 [tool.uv.sources]
-pycardano = { git = "https://github.com/Python-Cardano/pycardano", branch = "main" }
+pycardano = { git = "https://github.com/Python-Cardano/pycardano", rev = "70a7a3b5027eac00b850f0f2b997a141c86fe665" }
 
 [tool.hatch.build.targets.sdist]
 include = ["plutus_bench"]

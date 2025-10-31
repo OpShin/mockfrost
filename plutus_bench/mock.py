@@ -619,7 +619,7 @@ class MockFrostApi:
         return self.transaction_submit_raw(tx_cbor)
 
     @request_wrapper
-    def transaction_evaluate_raw(self, tx_cbor: bytes, **kwargs):
+    def transaction_evaluate_raw(self, tx_cbor: Union[bytes, str], **kwargs):
         try:
             if len(tx_cbor) > self.protocol_param.max_tx_size:
                 raise InvalidTransactionError(
