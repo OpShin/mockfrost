@@ -1,0 +1,17 @@
+.git
+.gitignore
+.venv
+.pytest_cache
+.idea
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.DS_Store
+SESSIONS.db
+SESSIONS.db-shm
+SESSIONS.db-wal
+docs
+contest
+tests
+report
