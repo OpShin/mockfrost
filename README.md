@@ -34,6 +34,19 @@ uvicorn plutus_bench.mockfrost.server:app
 After running these commands, a mock blockfrost server will be running on `http://localhost:8000`.
 Head to `http://localhost:8000/docs` to see the API documentation.
 
+### Docker
+
+```bash
+docker compose up --build
+```
+
+This starts MockFrost on `http://localhost:8000` and persists session data in a Docker volume.
+To stop it:
+
+```bash
+docker compose down
+```
+
 ### Usage
 
 Generally the workflow is as follows:

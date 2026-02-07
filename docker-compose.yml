@@ -1,0 +1,15 @@
+services:
+  mockfrost:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      MOCKFROST_SESSION_DATABASE_NAME: /data/SESSIONS.db
+    volumes:
+      - mockfrost_data:/data
+    restart: unless-stopped
+
+volumes:
+  mockfrost_data:
